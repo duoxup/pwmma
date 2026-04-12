@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pwmma"
+version = "1.0.0"
+description = "Pillbox Window Mode-Matching Algorithm"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "duoxup" }]
+dependencies = [
+  "numpy",
+  "scipy",
+  "tqdm",
+  # waveguides is an internal/private package and not available on PyPI.
+  # Install it manually from its source repository before installing this package.
+  "waveguides",
+]
+
+[project.optional-dependencies]
+# GPU-accelerated linear algebra backend (optional, requires CUDA toolkit)
+gpu = ["cupy-cuda12x"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "ipykernel"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pwmma*"]
+
+[tool.setuptools.package-data]
+pwmma = ["A.npy", "B.npy"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]   # pycodestyle, pyflakes, isort
+ignore = ["E501"]               # line-length is handled by formatter, not linter
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true   # waveguides has no stubs
