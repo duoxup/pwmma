@@ -23,12 +23,12 @@ def _return_args(*args):
 
 def _wrapper_rec2rec(args):
     i, j, a1, b1, a2, b2, mi_1, mi_2 = args
-    mode_type_1, mode_type_2 = mi_1.modeType, mi_2.modeType
-    m1, n1 = mi_1.modeNum1, mi_1.modeNum2
-    m2, n2 = mi_2.modeNum1, mi_2.modeNum2
+    mode_type_1, mode_type_2 = mi_1.mode_type, mi_2.mode_type
+    m1, n1 = mi_1.mode_num1, mi_1.mode_num2
+    m2, n2 = mi_2.mode_num1, mi_2.mode_num2
     kc_mn1 = mi_1.kc
     kc_mn2 = mi_2.kc
-    norm_factor = mi_1.normConstant * mi_2.normConstant
+    norm_factor = mi_1.norm_constant * mi_2.norm_constant
     
     args_calc = a1, b1, a2, b2, m1, n1, m2, n2, kc_mn1, kc_mn2, norm_factor
     match (mode_type_1, mode_type_2):
@@ -46,13 +46,13 @@ def _wrapper_rec2rec(args):
 
 def _wrapper_rec2cir(args):    #small rec to large circular --> cm_rc
     i, j, a, b, R, mi_1, mi_2 = args
-    mode_type_1, mode_type_2 = mi_1.modeType, mi_2.modeType
-    mode_polar_dir_2 = mi_2.polarDir
-    m, n = mi_1.modeNum1, mi_1.modeNum2
-    q, r = mi_2.modeNum1, mi_2.modeNum2
+    mode_type_1, mode_type_2 = mi_1.mode_type, mi_2.mode_type
+    mode_polar_dir_2 = mi_2.polar_dir
+    m, n = mi_1.mode_num1, mi_1.mode_num2
+    q, r = mi_2.mode_num1, mi_2.mode_num2
     kc_mn = mi_1.kc
     kc_qr = mi_2.kc
-    norm_factor = mi_2.plusDir * mi_1.normConstant * mi_2.normConstant
+    norm_factor = mi_2.plus_dir * mi_1.norm_constant * mi_2.norm_constant
     
     args_calc = a, b, R, m, n, q, r, 1000, kc_mn, kc_qr, norm_factor
     match (mode_type_1, mode_type_2, mode_polar_dir_2):
@@ -82,13 +82,13 @@ def _wrapper_cir2rec(args):    #small cir to large rec --> cm_cr
 
 def _wrapper_cir2cir(args):    #wg1 is the smaller one
     i, j, r01, r02, mi_1, mi_2 = args
-    mode_type_1, mode_type_2 = mi_1.modeType, mi_2.modeType
-    mode_polar_dir_1, mode_polar_dir_2 = mi_1.polarDir, mi_2.polarDir
-    q1, r1 = mi_1.modeNum1, mi_1.modeNum2
-    q2, r2 = mi_2.modeNum1, mi_2.modeNum2
+    mode_type_1, mode_type_2 = mi_1.mode_type, mi_2.mode_type
+    mode_polar_dir_1, mode_polar_dir_2 = mi_1.polar_dir, mi_2.polar_dir
+    q1, r1 = mi_1.mode_num1, mi_1.mode_num2
+    q2, r2 = mi_2.mode_num1, mi_2.mode_num2
     x1 = mi_1.kc * r01
     x2 = mi_2.kc * r02
-    norm_factor = mi_1.plusDir * mi_2.plusDir * mi_1.normConstant * mi_2.normConstant
+    norm_factor = mi_1.plus_dir * mi_2.plus_dir * mi_1.norm_constant * mi_2.norm_constant
     
     args_calc = r01, r02, q1, r1, q2, r2, x1, x2, norm_factor
     match (mode_type_1, mode_type_2, mode_polar_dir_1, mode_polar_dir_2):
@@ -133,8 +133,8 @@ def _wrapper_cir2cir(args):    #wg1 is the smaller one
 
 def _args_mixer(wgt: WGTransition):
     wg1, wg2 = wgt.wg1, wgt.wg2
-    mi_1 = np.asarray(wgt.wg1.modeInfoMat, dtype=object)
-    mi_2 = np.asarray(wgt.wg2.modeInfoMat, dtype=object)
+    mi_1 = np.asarray(wgt.wg1.mode_info_list, dtype=object)
+    mi_2 = np.asarray(wgt.wg2.mode_info_list, dtype=object)
     match (wg1.cross_tag.lower(), wg2.cross_tag.lower()):
         case ('rec', 'rec'):
             out = np.fromfunction(

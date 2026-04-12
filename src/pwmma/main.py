@@ -43,10 +43,10 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
     logger.info('Backend: %s | Precision: %s | Frequencies: %d | Waveguides: %d',
                 backend_name, precision, len(freqs), wgchain.n_wgs)
     with Pool(processes=sm_config.nproc) as pool:
-        zarr_list = [cnp.asarray(hc.impedance_array_multifreq(wg, freqs, \
+        zarr_list = [cnp.asarray(hc.impedance_array(wg, freqs, \
                      pool=pool, chunksize=2048), dtype=dtype) \
                      for wg in wgchain.wgs]
-        ps_list = [cnp.asarray(hc.phaseshift_array_multifreq(wg, freqs, \
+        ps_list = [cnp.asarray(hc.propagation_factor_array(wg, freqs, \
                    pool=pool, chunksize=2048), dtype=dtype) \
                    for wg in wgchain.wgs]
             
