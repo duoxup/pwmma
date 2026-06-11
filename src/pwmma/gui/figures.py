@@ -78,3 +78,42 @@ def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
         legend=dict(orientation="h"),
     )
     return fig
+
+
+def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True) -> go.Figure:
+    """Per-mode propagating power for the dominant modes, plus totals."""
+    freqs_ghz = section.freqs * 1e-9
+    fig = go.Figure()
+    dominant = section.dominant_mode_ids(threshold=mode_threshold)
+    labels = section.get_mode_labels(mode_ids=dominant)
+    for mode_id, label in zip(dominant, labels):
+        y = np.where(section.propagating_mask[:, mode_id], section.modal_power[:, mode_id], np.nan)
+        fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines", name=label))
+    fig.add_trace(go.Scatter(x=freqs_ghz, y=section.total_propagating_power,
+                             mode="lines", name="Σ prop.", line=dict(dash="dash", color="black")))
+    fig.update_layout(
+        height=420, margin=dict(l=50, r=10, t=30, b=40),
+        xaxis_title="Frequency (GHz)", yaxis_title="Net modal power",
+        legend=dict(orientation="h"),
+    )
+    if dB:
+        fig.update_yaxes(type="log")
+    return fig
+
+
+def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure:
+    """Per-mode power vs frequency; positive=propagating, negative=evanescent."""
+    n = section.modal_power.shape[1] if max_modes is None else min(max_modes, section.modal_power.shape[1])
+    data = section.modal_power[:, :n]
+    masked = np.where(section.propagating_mask[:, :n] | section.evanescent_mask[:, :n], data, np.nan)
+    vlim = float(np.nanmax(np.abs(masked))) if np.isfinite(masked).any() else 1.0
+    fig = go.Figure(go.Heatmap(
+        x=section.freqs * 1e-9, y=np.arange(n), z=masked.T,
+        colorscale="RdBu", zmid=0, zmin=-vlim, zmax=vlim,
+        colorbar=dict(title="Power"),
+    ))
+    fig.update_layout(
+        height=420, margin=dict(l=50, r=10, t=30, b=40),
+        xaxis_title="Frequency (GHz)", yaxis_title="Mode index",
+    )
+    return fig
