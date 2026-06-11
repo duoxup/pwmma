@@ -1,0 +1,65 @@
+import numpy as np
+import pytest
+from waveguides import CirWG, RecWG
+
+from pwmma.gui import adapter as A
+
+
+def test_parse_waveguide_rec_converts_mm_to_si():
+    wg = A.parse_waveguide({"kind": "rec", "a": 7.112, "b": 3.556,
+                            "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"})
+    assert isinstance(wg, RecWG)
+    assert wg.a == pytest.approx(7.112e-3)
+    assert wg.b == pytest.approx(3.556e-3)
+    assert wg.l == pytest.approx(2.0e-3)
+    assert wg.N == 24
+
+
+def test_parse_waveguide_cir_complex_er():
+    wg = A.parse_waveguide({"kind": "cir", "r": 5.4, "l": 0.26,
+                            "N": 96, "er": "9.2-0.5j", "sigma": "5.8e7"})
+    assert isinstance(wg, CirWG)
+    assert wg.r == pytest.approx(5.4e-3)
+    assert wg.er == pytest.approx(9.2 - 0.5j)
+
+
+def test_parse_chain_builds_sym_chain():
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+    ]
+    chain = A.parse_chain(rows, sym=True)
+    assert chain.sym is True
+    assert chain.n_wgs == 2
+
+
+def test_parse_freqs_ghz_to_hz():
+    freqs = A.parse_freqs(28.0, 34.0, 4)
+    np.testing.assert_allclose(freqs, np.array([28.0, 30.0, 32.0, 34.0]) * 1e9)
+
+
+def test_parse_config_maps_fields():
+    cfg = A.parse_config({"nproc": 8}, {"nproc": 8, "use_gpu": False, "precision": "complex64"})
+    assert cfg.cmconf.nproc == 8
+    assert cfg.smconf.use_gpu is False
+    assert cfg.smconf.use_double_precision is False
+
+
+def test_empty_chain_raises():
+    with pytest.raises(A.GuiInputError, match="at least 2"):
+        A.parse_chain([{"kind": "rec", "a": 7, "b": 3, "l": 2, "N": 24, "er": "1", "sigma": "5.8e7"}], sym=False)
+
+
+def test_bad_geometry_raises():
+    with pytest.raises(A.GuiInputError, match="positive"):
+        A.parse_waveguide({"kind": "cir", "r": -1, "l": 1, "N": 8, "er": "1", "sigma": "5.8e7"})
+
+
+def test_bad_er_raises():
+    with pytest.raises(A.GuiInputError, match="er"):
+        A.parse_waveguide({"kind": "cir", "r": 4.2, "l": 1, "N": 8, "er": "abc", "sigma": "5.8e7"})
+
+
+def test_bad_freq_range_raises():
+    with pytest.raises(A.GuiInputError, match="start"):
+        A.parse_freqs(34.0, 28.0, 4)
