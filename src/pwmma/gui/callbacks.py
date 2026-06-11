@@ -136,7 +136,7 @@ def register_run_callback(app):
         if error is not None:
             return None, error
         token = f"run-{n_clicks}"
-        app.server.config.setdefault("PWMMA_RESULTS", {})[token] = payload
+        app._pwmma_cache.set(token, payload)
         return {"token": token, "section_indices": payload["section_indices"]}, ""
 
 
@@ -151,9 +151,24 @@ def render_energy(payload, *, section, kind, threshold, db):
     return figures.energy_line_figure(sec, mode_threshold=float(threshold), dB=bool(db))
 
 
+def tab_visibility(tab):
+    """Styles for (sparam-graph, energy-graph, energy-controls) given the active tab."""
+    show, hide = {"display": "block"}, {"display": "none"}
+    if tab == "spars":
+        return show, hide, hide
+    return hide, show, show
+
+
 def register_plot_callbacks(app):
     def _payload(token):
-        return app.server.config.get("PWMMA_RESULTS", {}).get(token) if token else None
+        return app._pwmma_cache.get(token) if token else None
+
+    @app.callback(
+        Output("sparam-graph", "style"), Output("energy-graph", "style"),
+        Output("energy-controls", "style"), Input("result-tab", "value"),
+    )
+    def _toggle_tab(tab):
+        return tab_visibility(tab)
 
     @app.callback(Output("section-select", "options"), Output("section-select", "value"),
                   Input("result-store", "data"))

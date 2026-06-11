@@ -88,3 +88,44 @@ def test_render_plots_from_payload():
     assert isinstance(render_spars(payload), go.Figure)
     assert isinstance(render_energy(payload, section=2, kind="heatmap",
                                     threshold=0.04, db=True), go.Figure)
+
+
+def test_result_payload_survives_diskcache_roundtrip(tmp_path):
+    import diskcache
+    import plotly.graph_objects as go
+
+    from pwmma.gui.callbacks import compute_payload, render_energy, render_spars
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
+    ]
+    form = {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
+            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64"}
+    payload, err = compute_payload(form, lambda d, t: None)
+    assert err is None
+    # The background worker and the main process communicate ONLY through the
+    # diskcache, so the payload must survive a pickle round-trip and stay usable.
+    cache = diskcache.Cache(str(tmp_path / "c"))
+    try:
+        cache.set("tok", payload)
+        got = cache.get("tok")
+    finally:
+        cache.close()
+    assert got is not None
+    assert got["section_indices"] == payload["section_indices"]
+    sec_id = got["section_indices"][0]
+    assert isinstance(render_spars(got), go.Figure)
+    assert isinstance(render_energy(got, section=sec_id, kind="line",
+                                    threshold=0.04, db=True), go.Figure)
+
+
+def test_tab_visibility_switches_views():
+    from pwmma.gui.callbacks import tab_visibility
+    spars, energy_graph, energy_controls = tab_visibility("spars")
+    assert spars["display"] == "block"
+    assert energy_graph["display"] == "none"
+    spars, energy_graph, energy_controls = tab_visibility("energy")
+    assert spars["display"] == "none"
+    assert energy_graph["display"] == "block"
+    assert energy_controls["display"] == "block"

@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gui = ["dash>=2.16", "plotly>=5.20", "diskcache>=5.6"]
+gui = ["dash[diskcache]>=2.16", "plotly>=5.20", "diskcache>=5.6"]
 # GPU-accelerated linear algebra backend (optional, requires CUDA toolkit)
 gpu = ["cupy-cuda12x"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "ipykernel"]

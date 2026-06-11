@@ -19,6 +19,9 @@ def create_app() -> Dash:
     cache = diskcache.Cache(os.path.join(tempfile.gettempdir(), "pwmma-gui-cache"))
     manager = DiskcacheManager(cache)
     app = Dash(__name__, background_callback_manager=manager, title="pwmma")
+    # Same diskcache as the background manager: a cross-process store so results
+    # written by the background-callback worker are readable in the main process.
+    app._pwmma_cache = cache
     app.layout = build_layout()
     cb.register_callbacks(app)
     cb.register_run_callback(app)
