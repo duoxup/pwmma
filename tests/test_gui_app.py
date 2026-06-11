@@ -27,3 +27,22 @@ def test_layout_has_core_component_ids():
     for required in ["chain-store", "result-store", "run-button", "structure-preview",
                      "sparam-graph", "energy-graph", "status"]:
         assert required in ids, f"missing component id {required}"
+
+
+def test_render_chain_rows_builds_inputs_per_row():
+    from pwmma.gui.callbacks import render_chain_rows
+    rows = [{"kind": "rec", "a": 7.0, "b": 3.0, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"}]
+    children = render_chain_rows(rows)
+    assert len(children) == 1
+
+
+def test_preview_callback_returns_figure():
+    import plotly.graph_objects as go
+
+    from pwmma.gui.callbacks import update_structure_preview
+    rows = [
+        {"kind": "rec", "a": 7.0, "b": 3.0, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+    ]
+    fig = update_structure_preview(rows, ["sym"])
+    assert isinstance(fig, go.Figure)
