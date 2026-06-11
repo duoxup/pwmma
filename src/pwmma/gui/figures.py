@@ -117,3 +117,10 @@ def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure
         xaxis_title="Frequency (GHz)", yaxis_title="Mode index",
     )
     return fig
+
+
+def empty_figure(message: str) -> go.Figure:
+    fig = go.Figure()
+    fig.add_annotation(text=message, showarrow=False, font=dict(size=16, color="#999"))
+    fig.update_layout(height=420, xaxis=dict(visible=False), yaxis=dict(visible=False))
+    return fig

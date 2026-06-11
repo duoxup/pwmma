@@ -22,6 +22,7 @@ def create_app() -> Dash:
     app.layout = build_layout()
     cb.register_callbacks(app)
     cb.register_run_callback(app)
+    cb.register_plot_callbacks(app)
     return app
 
 

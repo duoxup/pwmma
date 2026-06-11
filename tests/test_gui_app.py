@@ -71,3 +71,20 @@ def test_run_analysis_core_produces_result_payload():
     assert error is None
     assert payload["section_indices"] == [1, 2, 3]
     assert progress and progress[-1] == (3, 3)
+
+
+def test_render_plots_from_payload():
+    import plotly.graph_objects as go
+
+    from pwmma.gui.callbacks import compute_payload, render_energy, render_spars
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
+    ]
+    form = {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
+            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64"}
+    payload, _ = compute_payload(form, lambda d, t: None)
+    assert isinstance(render_spars(payload), go.Figure)
+    assert isinstance(render_energy(payload, section=2, kind="heatmap",
+                                    threshold=0.04, db=True), go.Figure)

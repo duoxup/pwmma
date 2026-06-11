@@ -138,3 +138,43 @@ def register_run_callback(app):
         token = f"run-{n_clicks}"
         app.server.config.setdefault("PWMMA_RESULTS", {})[token] = payload
         return {"token": token, "section_indices": payload["section_indices"]}, ""
+
+
+def render_spars(payload):
+    return figures.sparam_figure(payload["spars"], excitation_mode=0)
+
+
+def render_energy(payload, *, section, kind, threshold, db):
+    sec = payload["result"].get_section(int(section))
+    if kind == "heatmap":
+        return figures.energy_heatmap_figure(sec)
+    return figures.energy_line_figure(sec, mode_threshold=float(threshold), dB=bool(db))
+
+
+def register_plot_callbacks(app):
+    def _payload(token):
+        return app.server.config.get("PWMMA_RESULTS", {}).get(token) if token else None
+
+    @app.callback(Output("section-select", "options"), Output("section-select", "value"),
+                  Input("result-store", "data"))
+    def _sections(data):
+        if not data:
+            return [], None
+        idx = data["section_indices"]
+        return [{"label": str(i), "value": i} for i in idx], (idx[len(idx) // 2] if idx else None)
+
+    @app.callback(Output("sparam-graph", "figure"), Input("result-store", "data"))
+    def _spars(data):
+        p = _payload(data and data.get("token"))
+        return figures.sparam_figure(p["spars"]) if p else figures.empty_figure("Run first")
+
+    @app.callback(
+        Output("energy-graph", "figure"),
+        Input("result-store", "data"), Input("section-select", "value"),
+        Input("plot-kind", "value"), Input("mode-threshold", "value"), Input("db-toggle", "value"),
+    )
+    def _energy(data, section, kind, threshold, db):
+        p = _payload(data and data.get("token"))
+        if not p or section is None:
+            return figures.empty_figure("Run first")
+        return render_energy(p, section=section, kind=kind, threshold=threshold, db=bool(db))
