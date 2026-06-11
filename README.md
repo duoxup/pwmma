@@ -33,6 +33,20 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
+## GUI
+
+Install the GUI extra and launch the browser app:
+
+```bash
+pip install -e ".[gui]"
+pwmma-gui
+```
+
+This opens an interactive analyzer to assemble a waveguide chain, configure the
+computation, run it, and explore the S-parameter and energy-coupling results
+(with a live structure preview). On WSL the local server is reachable from the
+Windows browser at the printed `http://localhost:<port>` address.
+
 ## Quick start
 
 ```python
