@@ -1,13 +1,15 @@
 """Pure, Dash-independent translation between GUI form state and the pwmma core."""
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Callable, Sequence
 
 import numpy as np
 from waveguides import WG, CirWG, RecWG
 
+from .. import analyze_energy_coupling
 from ..config import CMConfig, Config, SMConfig
 from ..inputs import Chain
+from ..main import calc_spars_of_wgchain
 
 
 class GuiInputError(ValueError):
@@ -83,3 +85,19 @@ def parse_config(cm: dict, sm: dict) -> Config:
             use_double_precision=(precision == "complex128"),
         ),
     )
+
+
+def run_energy(chain, freqs, config, *, sections, excitation_mode=0,
+               progress_callback: Callable[[int, int], None] | None = None):
+    return analyze_energy_coupling(
+        chain, freqs, config, sections=sections, excitation_mode=excitation_mode,
+        show_progress=False, progress_callback=progress_callback,
+    )
+
+
+def run_spars(chain, freqs, config,
+              progress_callback: Callable[[int, int], None] | None = None) -> dict:
+    s11, s12, s21, s22 = calc_spars_of_wgchain(
+        chain, freqs, config, show_progress=False, progress_callback=progress_callback,
+    )
+    return {"freqs": np.asarray(freqs), "s11": s11, "s12": s12, "s21": s21, "s22": s22}

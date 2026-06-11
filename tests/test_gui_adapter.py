@@ -63,3 +63,33 @@ def test_bad_er_raises():
 def test_bad_freq_range_raises():
     with pytest.raises(A.GuiInputError, match="start"):
         A.parse_freqs(34.0, 28.0, 4)
+
+
+def test_run_energy_returns_result_and_reports_progress():
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
+    ]
+    chain = A.parse_chain(rows, sym=True)
+    freqs = A.parse_freqs(28.0, 34.0, 3)
+    cfg = A.parse_config({"nproc": 2}, {"nproc": 2, "use_gpu": False, "precision": "complex64"})
+    seen = []
+    result = A.run_energy(chain, freqs, cfg, sections=[2], excitation_mode=0,
+                          progress_callback=lambda d, t: seen.append((d, t)))
+    assert result.section_indices == (2,)
+    assert result.get_section(2).modal_power.shape == (3, 96)
+    assert seen == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_run_spars_returns_arrays():
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+    ]
+    chain = A.parse_chain(rows, sym=True)
+    freqs = A.parse_freqs(28.0, 34.0, 3)
+    cfg = A.parse_config({"nproc": 2}, {"nproc": 2, "use_gpu": False, "precision": "complex64"})
+    out = A.run_spars(chain, freqs, cfg)
+    assert set(out) == {"s11", "s12", "s21", "s22", "freqs"}
+    assert out["s11"].shape[0] == 3
