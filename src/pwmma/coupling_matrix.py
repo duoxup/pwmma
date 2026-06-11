@@ -55,7 +55,7 @@ def get_coupling_matrix(wgt: Transition,
     cm = None
     if config.cm_cache_dir is not None and config.try_read_cm_from_cache:
         try:
-            cm = read_coupling_matrix_from_cache(wgt, config.cm_cache_dir)
+            cm = read_coupling_matrix_from_cache(wgt_s2l, config.cm_cache_dir)
             logger.info('Coupling matrix loaded from cache: %s', config.cm_cache_dir)
         except FileNotFoundError:
             logger.info('Coupling matrix not found in cache, computing...')
@@ -67,7 +67,7 @@ def get_coupling_matrix(wgt: Transition,
         else:
             chunksize = config.chunksize
         with Pool(processes=nproc) as pool:
-            cm = calc_coupling_matrix(wgt, pool=pool, chunksize=chunksize)
+            cm = calc_coupling_matrix(wgt_s2l, pool=pool, chunksize=chunksize)
         logger.debug('Coupling matrix computed, shape=%s', cm.shape)
         if config.cm_cache_dir is not None and config.save_cm_to_cache:
             save_coupling_matrix_to_cache(cm, wgt_s2l, config.cm_cache_dir)

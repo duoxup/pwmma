@@ -28,7 +28,6 @@ class SMConfig:
     try_read_sm_from_cache: bool = False
     save_sm_to_cache: bool = False
     sm_cache_dir: Optional[str] = None  # must be set explicitly to enable caching
-    conjugate_output: bool = True  # for debug
     
 @dataclass
 class Config:

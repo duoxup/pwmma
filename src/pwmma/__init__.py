@@ -1,5 +1,16 @@
 import logging
 
+from .analysis import (
+    ChainEnergyCouplingResult,
+    SectionEnergyCoupling,
+    analyze_energy_coupling,
+)
+from .analysis_plotting import (
+    plot_chain_energy_overview,
+    plot_section_energy_coupling,
+    plot_section_energy_heatmap,
+    save_figure,
+)
 from .main import calc_spars_of_wgchain
 from .coupling_matrix import get_coupling_matrix
 from .inputs import Chain, Transition
@@ -16,9 +27,17 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 __all__ = [
     # Primary workflow
     'calc_spars_of_wgchain',
+    'analyze_energy_coupling',
+    'plot_section_energy_coupling',
+    'plot_chain_energy_overview',
+    'plot_section_energy_heatmap',
+    'save_figure',
     # Input structures
     'Chain',
     'Transition',
+    # Analysis outputs
+    'SectionEnergyCoupling',
+    'ChainEnergyCouplingResult',
     # Configuration
     'Config',
     'CMConfig',

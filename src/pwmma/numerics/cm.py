@@ -10,16 +10,13 @@ from __future__ import annotations
 from typing import Tuple, Optional, Union, Iterable
 import numpy as np
 from multiprocessing import Pool
-import math
 
-from ..io.numpy import read_coupling_matrix_from_cache, save_coupling_matrix_to_cache
 from ..inputs import Transition
 
 from . import cm_cc, cm_rc, cm_cr, cm_rr
 
 WGTransition = Transition
-def _return_args(*args):
-    return args
+
 
 def _wrapper_rec2rec(args):
     i, j, a1, b1, a2, b2, mi_1, mi_2 = args
@@ -126,7 +123,6 @@ def _wrapper_cir2cir(args):    #wg1 is the smaller one
             func = cm_cc.ee_ss
         case _:
             raise ValueError(f'Unknown mode info found: ({mode_type_1}, {mode_type_2}, {mode_polar_dir_1}, {mode_polar_dir_2})')
-    # func = _return_args
     return i, j, func(*args_calc)
     # return i, j, (mode_type_1, mode_type_2, mode_polar_dir_1, mode_polar_dir_2)
 

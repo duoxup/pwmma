@@ -8,31 +8,6 @@ Created on Sat Jan 17 17:35:17 2026
 
 import numpy as np
 
-from ..gpu import gpu_ready
-
-
-def _select_backend(config):
-    """Return numpy or cupy backend according to config and gpu_ready."""
-    use_gpu = getattr(config, "use_gpu", False)
-    if use_gpu:
-        try:
-            import cupy as cp
-            if gpu_ready:
-                return cp
-        except NameError:
-            pass
-    return np
-
-
-def _complex_dtype(cnp, config):
-    """Return complex dtype according to config."""
-    use_dp = getattr(config, "use_double_precision", True)
-    return cnp.complex128 if use_dp else cnp.complex64
-
-
-def _asarrays(cnp, dtype, *args):
-    """Convert all args to backend arrays of given dtype."""
-    return tuple(cnp.asarray(a, dtype=dtype) for a in args)
 
 def _apply_left_port_propagation_to_SB(SB, p_int, cnp=np):
     """

@@ -61,7 +61,103 @@ freqs = np.linspace(600e9, 740e9, 281)
 s11, s12, s21, s22 = pwmma.calc_spars_of_wgchain(chain, freqs, config)
 # Each is a (n_freqs, N1, N1) array of complex mode coupling coefficients.
 # s11[i] = S11 matrix at freqs[i], etc.
+
+# Analyze modal net-power contributions on internal sections
+analysis = pwmma.analyze_energy_coupling(chain, freqs, config, sections=2)
+section = analysis.sections[2]
+# section.modal_power.shape == (n_freqs, chain.wgs[2].N) for non-symmetric chains.
+# For symmetric chains, section indices refer to the expanded physical chain.
+fig, axes = pwmma.plot_section_energy_coupling(section)
+analysis.save_npz("energy_coupling.npz")
 ```
+
+## Energy coupling analysis
+
+`analyze_energy_coupling(...)` recovers the modal net-power contribution on one or more internal
+waveguide sections of a chain. It is intended for inspecting which propagating and evanescent
+modes participate in energy transfer inside a multi-section window structure.
+
+### Section indexing
+
+The `sections` argument always uses the expanded physical chain index.
+
+For example:
+
+```python
+chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
+```
+
+is analyzed as the physical chain:
+
+```python
+[rwg, cwg, dsk, cwg, rwg]
+```
+
+so the valid internal sections are:
+
+- `1`: left circular guide
+- `2`: dielectric window
+- `3`: right circular guide
+
+### Result objects
+
+The analysis API returns a `ChainEnergyCouplingResult`, whose `.sections` dict contains one
+`SectionEnergyCoupling` per requested section.
+
+Each `SectionEnergyCoupling` stores:
+
+- `freqs`: frequency array
+- `mode_ids`: modal indices in that waveguide section
+- `modal_power`: per-mode net-power contribution, shape `(n_freqs, n_modes)`
+- `propagating_mask`, `evanescent_mask`: per-frequency modal type masks
+- `forward_left`, `backward_left`, `forward_right`, `backward_right`: recovered modal wave coefficients
+- `reflection_power`: reflected fundamental-mode power at the input port
+- `power_balance`: `reflection + propagating + evanescent`
+
+Mode names are not stored in the result file. If a `waveguides.WG` object is attached or passed
+to plotting helpers, labels are reconstructed from `mode_ids`.
+
+### Saving and loading results
+
+Both result classes support lightweight NPZ serialization:
+
+```python
+analysis = pwmma.analyze_energy_coupling(chain, freqs, config, sections=[1, 2, 3])
+analysis.save_npz("energy_coupling_chain.npz")
+
+reloaded = pwmma.ChainEnergyCouplingResult.load_npz("energy_coupling_chain.npz")
+window = reloaded.get_section(2)
+
+window.save_npz("window_only.npz")
+window2 = pwmma.SectionEnergyCoupling.load_npz("window_only.npz")
+```
+
+### Plotting helpers
+
+Plot one section with modal detail:
+
+```python
+section = analysis.get_section(2)
+fig, axes = pwmma.plot_section_energy_coupling(
+    section,
+    mode_threshold=0.04,
+    title="Window Section Modal Energy Coupling",
+)
+pwmma.save_figure(fig, "window_section.png")
+```
+
+Compare multiple sections at a glance:
+
+```python
+fig, axes = pwmma.plot_chain_energy_overview(analysis, sections=[1, 2, 3])
+pwmma.save_figure(fig, "energy_coupling_overview.png")
+```
+
+Useful convenience methods on `SectionEnergyCoupling` include:
+
+- `dominant_mode_ids(threshold=...)`
+- `max_power_balance_error()`
+- `get_mode_labels(wg=...)`
 
 ## Caching coupling matrices
 
@@ -103,6 +199,10 @@ logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s')
 | Symbol | Description |
 |--------|-------------|
 | `calc_spars_of_wgchain(chain, freqs, config, show_progress=True)` | Compute S-parameters for a waveguide chain across a frequency sweep |
+| `analyze_energy_coupling(chain, freqs, config, sections=None, excitation_mode=0, show_progress=True)` | Recover per-mode net-power contributions on one or more internal waveguide sections |
+| `plot_section_energy_coupling(section, ...)` | Plot propagating/evanescent modal contributions for one section |
+| `plot_chain_energy_overview(result, ...)` | Compare total propagating/evanescent power and balance error across sections |
+| `save_figure(fig, path, dpi=160)` | Save a matplotlib figure and create parent directories if needed |
 | `get_coupling_matrix(transition, cmconfig)` | Compute (or load from cache) the coupling matrix for a single junction |
 
 ### Input structures

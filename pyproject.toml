@@ -31,9 +31,6 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["pwmma*"]
 
-[tool.setuptools.package-data]
-pwmma = ["A.npy", "B.npy"]
-
 [tool.ruff]
 line-length = 100
 target-version = "py310"
