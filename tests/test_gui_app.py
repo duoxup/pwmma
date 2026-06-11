@@ -46,3 +46,28 @@ def test_preview_callback_returns_figure():
     ]
     fig = update_structure_preview(rows, ["sym"])
     assert isinstance(fig, go.Figure)
+
+
+def test_create_app_builds_dash_app():
+    from pwmma.gui.app import create_app
+    app = create_app()
+    assert app.layout is not None
+    # callbacks registered
+    assert len(app.callback_map) > 0
+
+
+def test_run_analysis_core_produces_result_payload():
+    # The pure compute helper behind the background callback.
+    from pwmma.gui.callbacks import compute_payload
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
+    ]
+    form = {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
+            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64"}
+    progress = []
+    payload, error = compute_payload(form, lambda d, t: progress.append((d, t)))
+    assert error is None
+    assert payload["section_indices"] == [1, 2, 3]
+    assert progress and progress[-1] == (3, 3)

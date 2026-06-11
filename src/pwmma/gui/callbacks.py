@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dash import ALL, Input, Output, State, ctx, dcc, html
 
-from . import adapter, figures  # noqa: F401  (adapter used by callers that import this module)
+from . import adapter, figures
 
 _FIELDS = {"rec": ["a", "b", "l", "N", "er", "sigma"], "cir": ["r", "l", "N", "er", "sigma"]}
 
@@ -83,3 +83,58 @@ def register_callbacks(app):
         for inp in ctx.inputs_list[2]:  # wg-kind inputs
             rows[inp["id"]["i"]]["kind"] = inp.get("value", "cir")
         return rows
+
+
+def compute_payload(form: dict, progress_callback):
+    """Pure compute step used by the background callback. Returns (payload, error_str)."""
+    try:
+        chain = adapter.parse_chain(form["rows"], form["sym"])
+        freqs = adapter.parse_freqs(form["f_start"], form["f_stop"], form["f_n"])
+        cfg = adapter.parse_config(
+            {"nproc": form["cm_nproc"]},
+            {"nproc": form["sm_nproc"], "use_gpu": form["use_gpu"], "precision": form["precision"]},
+        )
+    except adapter.GuiInputError as exc:
+        return None, str(exc)
+    try:
+        n_phys = len(chain.wgs) + (len(chain.wgs) - 1 if chain.sym else 0)
+        sections = list(range(1, n_phys - 1)) or None
+        result = adapter.run_energy(chain, freqs, cfg, sections=sections,
+                                    progress_callback=progress_callback)
+        spars = adapter.run_spars(chain, freqs, cfg)
+    except (NotImplementedError, ValueError) as exc:
+        return None, f"computation failed: {exc}"
+    return {
+        "section_indices": list(result.section_indices),
+        "result": result, "spars": spars,
+    }, None
+
+
+def register_run_callback(app):
+    @app.callback(
+        output=[Output("result-store", "data"), Output("status", "children")],
+        inputs=Input("run-button", "n_clicks"),
+        state=[State("chain-store", "data"), State("sym", "value"),
+               State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
+               State("cm-nproc", "value"), State("sm-nproc", "value"),
+               State("use-gpu", "value"), State("precision", "value")],
+        background=True,
+        running=[(Output("run-button", "disabled"), True, False)],
+        progress=[Output("run-progress", "value"), Output("run-progress", "max")],
+        prevent_initial_call=True,
+    )
+    def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
+             cm_nproc, sm_nproc, use_gpu, precision):
+        form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
+                "f_n": f_n, "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
+                "use_gpu": bool(use_gpu), "precision": precision}
+
+        def progress(done, tot):
+            set_progress((str(done), str(tot)))
+
+        payload, error = compute_payload(form, progress)
+        if error is not None:
+            return None, error
+        token = f"run-{n_clicks}"
+        app.server.config.setdefault("PWMMA_RESULTS", {})[token] = payload
+        return {"token": token, "section_indices": payload["section_indices"]}, ""
