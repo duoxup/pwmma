@@ -8,7 +8,7 @@ Created on Mon Feb  9 17:20:32 2026
 from __future__ import annotations
 
 import logging
-from typing import Sequence, Tuple
+from typing import Callable, Sequence, Tuple
 import numpy as np
 from multiprocessing import Pool
 from tqdm import tqdm
@@ -31,6 +31,7 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                           freqs: Sequence[float],
                           config: 'Config',
                           show_progress: bool = True,
+                          progress_callback: Callable[[int, int], None] | None = None,
                           ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     cm_config, sm_config = config.cmconf, config.smconf
     cnp = get_array_backend(sm_config.use_gpu)
@@ -84,7 +85,10 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
         st12.append(S[1])
         st21.append(S[2])
         st22.append(S[3])
-        
+
+        if progress_callback is not None:
+            progress_callback(idx_f + 1, len(freqs))
+
     st11 = np.stack([x.get() for x in st11]) if cnp is not np else np.stack(st11)
     st12 = np.stack([x.get() for x in st12]) if cnp is not np else np.stack(st12)
     st21 = np.stack([x.get() for x in st21]) if cnp is not np else np.stack(st21)

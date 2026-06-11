@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import logging
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
 
 import numpy as np
 
@@ -512,6 +512,7 @@ def analyze_energy_coupling(
     sections: int | Sequence[int] | None = None,
     excitation_mode: int = 0,
     show_progress: bool = True,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> ChainEnergyCouplingResult:
     """
     Analyze modal net-power contributions on internal sections of a waveguide chain.
@@ -541,6 +542,9 @@ def analyze_energy_coupling(
         Input-port mode index used as the incident excitation.
     show_progress:
         Whether to display a tqdm progress bar during the frequency sweep.
+    progress_callback:
+        Optional callable invoked once per frequency point as
+        ``progress_callback(done, total)``. Defaults to ``None``.
 
     Returns
     -------
@@ -715,6 +719,9 @@ def analyze_energy_coupling(
             bucket["total_reflected_power"].append(_to_numpy(total_reflected_power, cnp).item())
             bucket["transmission_power"].append(_to_numpy(transmission_power, cnp).item())
             bucket["power_balance"].append(_to_numpy(power_balance, cnp).item())
+
+        if progress_callback is not None:
+            progress_callback(idx_f + 1, len(freqs))
 
     result_sections = {}
     freqs_np = freqs_arr
