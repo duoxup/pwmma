@@ -1,6 +1,7 @@
 """Pure Plotly figure builders for the pwmma GUI. No Dash imports."""
 from __future__ import annotations
 
+import numpy as np
 import plotly.graph_objects as go
 
 _METAL = "#b3c7e6"
@@ -56,4 +57,24 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
     )
     if segments:
         fig.update_xaxes(range=[-0.02 * x, 1.02 * x])
+    return fig
+
+
+def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
+    """Plot |S11| and |S21| of the excitation mode (reflection/transmission) in dB."""
+    freqs_ghz = np.asarray(spars["freqs"]) * 1e-9
+    e = excitation_mode
+    fig = go.Figure()
+    for name, key in (("S11", "s11"), ("S21", "s21")):
+        mat = np.asarray(spars[key])
+        with np.errstate(divide="ignore"):
+            db = 20.0 * np.log10(np.abs(mat[:, e, e]))
+        fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines", name=name))
+    fig.update_layout(
+        height=420,
+        margin=dict(l=50, r=10, t=30, b=40),
+        xaxis_title="Frequency (GHz)",
+        yaxis_title="Magnitude (dB)",
+        legend=dict(orientation="h"),
+    )
     return fig

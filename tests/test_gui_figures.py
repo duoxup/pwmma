@@ -1,3 +1,4 @@
+import numpy as np
 import plotly.graph_objects as go
 
 from pwmma.gui import figures as F
@@ -25,3 +26,20 @@ def test_structure_preview_empty_is_safe():
     fig = F.structure_preview_figure([], sym=False)
     assert isinstance(fig, go.Figure)
     assert len(fig.layout.shapes) == 0
+
+
+def _fake_spars(n=3, modes=4):
+    rng = np.random.default_rng(0)
+
+    def m():
+        return (rng.random((n, modes, modes)) + 1j * rng.random((n, modes, modes))) * 0.1
+
+    return {"freqs": np.linspace(28e9, 34e9, n), "s11": m(), "s12": m(), "s21": m(), "s22": m()}
+
+
+def test_sparam_figure_has_traces_in_db():
+    fig = F.sparam_figure(_fake_spars(), excitation_mode=0)
+    assert isinstance(fig, go.Figure)
+    names = {t.name for t in fig.data}
+    assert "S11" in names and "S21" in names
+    assert "dB" in (fig.layout.yaxis.title.text or "")
