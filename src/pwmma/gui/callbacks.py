@@ -126,7 +126,9 @@ def register_callbacks(app):
     )
     def _config_summary(use_gpu, precision, cm_nproc, sm_nproc):
         device = "GPU" if use_gpu else "CPU"
-        return f"{device} · {precision} · {cm_nproc}/{sm_nproc} proc"
+        cm = "—" if cm_nproc is None else cm_nproc
+        sm = "—" if sm_nproc is None else sm_nproc
+        return f"{device} · {precision or '—'} · {cm}/{sm} proc"
 
     # transient button feedback: flash "saved ✓" then revert (browser-side timer)
     app.clientside_callback(
