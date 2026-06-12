@@ -2,6 +2,10 @@
 """Thin Dash callbacks; all logic delegates to adapter/figures."""
 from __future__ import annotations
 
+import dataclasses
+import re
+
+import numpy as np
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
 from . import adapter, defaults, figures
@@ -270,11 +274,70 @@ def render_spars(payload):
     return figures.sparam_figure(payload["spars"], excitation_mode=0)
 
 
-def render_energy(payload, *, section, kind, threshold, db):
-    sec = payload["result"].get_section(int(section))
+# Matches both rectangular ("TE1,0") and circular ("TM0,1S") mode labels.
+_MODE_LABEL_RE = re.compile(r"^(TE|TM)(\d+),(\d+)([CS])?$")
+
+
+def mode_filter_mask(labels, *, mode_type=None, m=None, n=None):
+    """Boolean mask over mode ``labels``; criteria left as None pass everything.
+
+    With any criterion active, labels that don't parse as TE/TM mode names
+    (the no-waveguide fallback of stringified ids) are excluded.
+    """
+    if mode_type is None and m is None and n is None:
+        return np.ones(len(labels), dtype=bool)
+    mask = np.zeros(len(labels), dtype=bool)
+    for i, label in enumerate(labels):
+        parsed = _MODE_LABEL_RE.match(label)
+        if parsed is None:
+            continue
+        if mode_type is not None and parsed.group(1) != mode_type:
+            continue
+        if m is not None and int(parsed.group(2)) != int(m):
+            continue
+        if n is not None and int(parsed.group(3)) != int(n):
+            continue
+        mask[i] = True
+    return mask
+
+
+def band_slice(section, f_lo, f_hi):
+    """Restrict a section to the [f_lo, f_hi] band (GHz; None = unbounded).
+
+    Returns the section unchanged when no bound is active, None when no sweep
+    point falls inside the band. Dominant-mode ranking on the sliced copy then
+    only sees the selected band.
+    """
+    if f_lo is None and f_hi is None:
+        return section
+    keep = np.ones(len(section.freqs), dtype=bool)
+    if f_lo is not None:
+        keep &= section.freqs >= float(f_lo) * 1e9
+    if f_hi is not None:
+        keep &= section.freqs <= float(f_hi) * 1e9
+    if not keep.any():
+        return None
+    if keep.all():
+        return section
+    per_freq = ["freqs", "modal_power", "propagating_mask", "evanescent_mask",
+                "forward_left", "backward_left", "forward_right", "backward_right",
+                "reflection_power", "total_reflected_power", "transmission_power",
+                "power_balance"]
+    return dataclasses.replace(section, **{f: getattr(section, f)[keep] for f in per_freq})
+
+
+def render_energy(payload, *, section, kind, threshold, db,
+                  mode_type=None, m=None, n=None, f_lo=None, f_hi=None):
+    sec = band_slice(payload["result"].get_section(int(section)), f_lo, f_hi)
+    if sec is None:
+        return figures.empty_figure("no sweep points in the selected band")
+    allowed = mode_filter_mask(sec.get_mode_labels(), mode_type=mode_type, m=m, n=n)
     if kind == "heatmap":
-        return figures.energy_heatmap_figure(sec)
-    return figures.energy_line_figure(sec, mode_threshold=float(threshold), dB=bool(db))
+        return figures.energy_heatmap_figure(
+            sec, mode_mask=None if allowed.all() else allowed)
+    dominant = sec.dominant_mode_ids(threshold=float(threshold))
+    return figures.energy_line_figure(
+        sec, dB=bool(db), mode_ids=dominant[allowed[dominant]])
 
 
 def tab_visibility(tab):
@@ -318,9 +381,12 @@ def register_plot_callbacks(app):
         Output("energy-graph", "figure"),
         Input("result-store", "data"), Input("section-select", "value"),
         Input("plot-kind", "value"), Input("mode-threshold", "value"), Input("db-toggle", "value"),
+        Input("mode-type-filter", "value"), Input("m-filter", "value"),
+        Input("n-filter", "value"), Input("ef-lo", "value"), Input("ef-hi", "value"),
     )
-    def _energy(data, section, kind, threshold, db):
+    def _energy(data, section, kind, threshold, db, mode_type, m, n, f_lo, f_hi):
         p = _payload(data and data.get("token"))
         if not p or section is None:
             return figures.empty_figure("Run first")
-        return render_energy(p, section=section, kind=kind, threshold=threshold, db=bool(db))
+        return render_energy(p, section=section, kind=kind, threshold=threshold, db=bool(db),
+                             mode_type=mode_type, m=m, n=n, f_lo=f_lo, f_hi=f_hi)

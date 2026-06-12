@@ -28,7 +28,8 @@ def test_layout_has_core_component_ids():
     walk(root)
     for required in ["chain-store", "result-store", "run-button", "stop-button",
                      "save-default", "structure-preview", "sparam-graph", "energy-graph",
-                     "status", "run-led", "run-status", "run-progress", "config-summary"]:
+                     "status", "run-led", "run-status", "run-progress", "config-summary",
+                     "mode-type-filter", "m-filter", "n-filter", "ef-lo", "ef-hi"]:
         assert required in ids, f"missing component id {required}"
 
 
@@ -237,6 +238,53 @@ def test_energy_line_shows_cutoff_segments_dotted():
 
     # total evanescent contribution gets its own summary trace
     assert "Σ evan." in by_name
+
+
+def test_energy_heatmap_marks_cutoff_boundary_and_filters_modes():
+    import numpy as np
+
+    from pwmma.gui import figures
+
+    sec = _synthetic_section()
+    fig = figures.energy_heatmap_figure(sec)
+    by_name = {t.name: t for t in fig.data if t.name}
+    boundary = np.asarray(by_name["cutoff"].y, dtype=float)
+    # mode 1 (position 1) is evanescent at the first two points: boundary at 0.5
+    assert boundary[0] == 0.5 and boundary[1] == 0.5
+    # everything propagates from the third point on: no boundary there
+    assert np.isnan(boundary[2:]).all()
+
+    # mode_mask drops filtered modes from the rows
+    fig2 = figures.energy_heatmap_figure(sec, mode_mask=np.array([False, True]))
+    assert np.asarray(fig2.data[0].z).shape[0] == 1
+
+
+def test_mode_filter_mask_parses_te_tm_m_n():
+    from pwmma.gui.callbacks import mode_filter_mask
+
+    labels = ["TE1,0", "TM1,1", "TE1,1C", "TM0,1S", "7"]
+    # no active filter: everything passes, even unparseable labels
+    assert mode_filter_mask(labels).tolist() == [True] * 5
+    assert mode_filter_mask(labels, mode_type="TE").tolist() == \
+        [True, False, True, False, False]
+    assert mode_filter_mask(labels, m=1).tolist() == [True, True, True, False, False]
+    assert mode_filter_mask(labels, mode_type="TM", n=1).tolist() == \
+        [False, True, False, True, False]
+
+
+def test_band_slice_restricts_frequency_range():
+
+    from pwmma.gui.callbacks import band_slice
+
+    sec = _synthetic_section()  # 5 points, 28..34 GHz
+    sub = band_slice(sec, 30.5, None)
+    assert (sub.freqs >= 30.5e9).all()
+    assert sub.modal_power.shape == (len(sub.freqs), 2)
+    # dominant-mode ranking now only sees the selected band
+    assert len(sub.freqs) == 3
+
+    assert band_slice(sec, None, None) is sec
+    assert band_slice(sec, 40.0, 50.0) is None  # outside the sweep
 
 
 def test_sweep_progress_reports_current_frequency():

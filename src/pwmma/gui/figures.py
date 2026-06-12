@@ -110,17 +110,24 @@ def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
     return _theme(fig)
 
 
-def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True) -> go.Figure:
+def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True,
+                       mode_ids=None) -> go.Figure:
     """Per-mode power for the dominant modes, plus totals.
 
     Each mode draws its propagating band solid and its cutoff (evanescent) band
     dotted in the same color, so the contribution below cutoff stays visible.
     Note: cutoff contributions can be negative, which a log axis (dB on) cannot
     render — switch dB off to see them.
+
+    ``mode_ids`` overrides the threshold-based dominant-mode selection (used by
+    the GUI mode filters). The Σ totals always sum over all modes.
     """
     freqs_ghz = section.freqs * 1e-9
     fig = go.Figure()
-    dominant = section.dominant_mode_ids(threshold=mode_threshold)
+    if mode_ids is None:
+        dominant = section.dominant_mode_ids(threshold=mode_threshold)
+    else:
+        dominant = np.asarray(mode_ids, dtype=int)
     labels = section.get_mode_labels(mode_ids=dominant)
     for i, (mode_id, label) in enumerate(zip(dominant, labels)):
         color = _COLORWAY[i % len(_COLORWAY)]
@@ -152,20 +159,53 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
     return _theme(fig)
 
 
-def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure:
-    """Per-mode power vs frequency; positive=propagating, negative=evanescent."""
-    n = section.modal_power.shape[1] if max_modes is None else min(max_modes, section.modal_power.shape[1])
-    data = section.modal_power[:, :n]
-    masked = np.where(section.propagating_mask[:, :n] | section.evanescent_mask[:, :n], data, np.nan)
+def energy_heatmap_figure(section, *, mode_mask=None, max_modes: int | None = None) -> go.Figure:
+    """Per-mode power vs frequency; positive=propagating, negative=evanescent.
+
+    A dashed gray line marks the cutoff boundary (modes above it are evanescent;
+    valid because mode ids are sorted by cutoff frequency). ``mode_mask`` is a
+    boolean per-mode filter; when given, every shown mode gets its own y tick.
+    """
+    n_total = section.modal_power.shape[1]
+    if mode_mask is not None:
+        shown = np.where(np.asarray(mode_mask, dtype=bool))[0]
+    elif max_modes is not None:
+        shown = np.arange(min(max_modes, n_total))
+    else:
+        shown = np.arange(n_total)
+    if len(shown) == 0:
+        return empty_figure("no modes match the filter")
+
+    freqs_ghz = section.freqs * 1e-9
+    prop = section.propagating_mask[:, shown]
+    evan = section.evanescent_mask[:, shown]
+    masked = np.where(prop | evan, section.modal_power[:, shown], np.nan)
     vlim = float(np.nanmax(np.abs(masked))) if np.isfinite(masked).any() else 1.0
+    labels = section.get_mode_labels(mode_ids=shown)
     fig = go.Figure(go.Heatmap(
-        x=section.freqs * 1e-9, y=np.arange(n), z=masked.T,
+        x=freqs_ghz, y=np.arange(len(shown)), z=masked.T,
         colorscale="RdBu", zmid=0, zmin=-vlim, zmax=vlim,
         colorbar=dict(title="Power"),
+        customdata=np.repeat(np.asarray(labels)[:, None], len(freqs_ghz), axis=1),
+        hovertemplate="%{x:.3f} GHz · %{customdata}<br>power %{z:.4g}<extra></extra>",
     ))
+
+    # cutoff boundary: first evanescent row at each frequency, drawn between cells
+    boundary = np.full(len(freqs_ghz), np.nan)
+    for i in range(len(freqs_ghz)):
+        evan_idx = np.where(evan[i])[0]
+        if len(evan_idx) > 0:
+            boundary[i] = evan_idx[0] - 0.5
+    fig.add_trace(go.Scatter(x=freqs_ghz, y=boundary, mode="lines", name="cutoff",
+                             line=dict(color="#5a6678", dash="dash"), hoverinfo="skip"))
+
+    step = 1 if mode_mask is not None else max(1, len(shown) // 12)
+    tickvals = np.arange(0, len(shown), step)
     fig.update_layout(
         height=528, margin=dict(l=50, r=10, t=30, b=40),
-        xaxis_title="Frequency (GHz)", yaxis_title="Mode index",
+        xaxis_title="Frequency (GHz)", yaxis_title="Mode",
+        yaxis=dict(tickvals=tickvals, ticktext=[labels[int(i)] for i in tickvals]),
+        legend=dict(orientation="h"),
     )
     return _theme(fig)
 

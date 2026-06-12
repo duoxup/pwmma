@@ -114,6 +114,7 @@ input:disabled { background: #f0f1f4; color: var(--text-disabled); }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 
 .num-input { width: 64px; }
+.num-xs { width: 56px; }
 .grow-input { flex: 1; }
 .lbl { font-size: 11px; color: var(--text-2); }
 .hint { font-size: 11px; color: #7a8496; margin-top: 4px; }
@@ -214,9 +215,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   overflow: auto;  /* short windows: scroll inside the frame, don't clip the 528px graphs */
 }
 .energy-controls-row {
-  display: flex; gap: 14px; align-items: center;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   padding: 2px 4px 6px;
 }
+.dd-small.dd-xs { width: 86px; }
 
 /* ---------- status bar ---------- */
 .statusbar {
