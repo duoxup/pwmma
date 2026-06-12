@@ -102,9 +102,14 @@ def compute_payload(form: dict, progress_callback):
     try:
         n_phys = len(chain.wgs) + (len(chain.wgs) - 1 if chain.sym else 0)
         sections = list(range(1, n_phys - 1)) or None
-        result = adapter.run_energy(chain, freqs, cfg, sections=sections,
-                                    progress_callback=progress_callback)
-        spars = adapter.run_spars(chain, freqs, cfg)
+        n = len(freqs)
+        total = 2 * n  # energy sweep + S-parameter sweep share one progress bar
+        result = adapter.run_energy(
+            chain, freqs, cfg, sections=sections,
+            progress_callback=lambda done, _t: progress_callback(done, total))
+        spars = adapter.run_spars(
+            chain, freqs, cfg,
+            progress_callback=lambda done, _t: progress_callback(n + done, total))
     except (NotImplementedError, ValueError) as exc:
         return None, f"computation failed: {exc}"
     return {

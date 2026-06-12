@@ -35,6 +35,7 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
         except (TypeError, ValueError):
             continue
         max_ap = max(max_ap, ap)
+        kind = str(row.get("kind", "rec")).lower()
         is_dielectric = abs(complex(str(row.get("er", "1") or "1"))) > 1.0001
         fill = _DIELECTRIC if is_dielectric else _METAL
         fig.add_shape(
@@ -48,21 +49,26 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
             opacity=0.5 if is_mirror else 0.9,
             layer="below",
         )
+        # cross-section hint: ○ for circular, ▭ for rectangular
+        fig.add_annotation(x=x + length / 2, y=0, text="○" if kind == "cir" else "▭",
+                           showarrow=False, font=dict(size=11, color="#333"))
         x += length
+    if segments and x > 0:
+        # An invisible trace pins the data extent; combined with equal-aspect
+        # scaling, Plotly autoranges to fit the whole structure in the frame
+        # (scaled down if needed) while preserving true proportions.
+        fig.add_trace(go.Scatter(
+            x=[0, x], y=[-max_ap / 2 * 1.1, max_ap / 2 * 1.1],
+            mode="markers", marker=dict(opacity=0), hoverinfo="skip", showlegend=False,
+        ))
     fig.update_layout(
         height=120,
         margin=dict(l=4, r=4, t=4, b=4),
         xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
         showlegend=False,
         plot_bgcolor="white",
     )
-    # Fit the whole structure inside the frame regardless of its proportions by
-    # pinning both axis ranges to the drawn extent (with a small margin).
-    if segments and x > 0:
-        half = (max_ap / 2) * 1.15 or 1.0
-        fig.update_xaxes(range=[-0.02 * x, 1.02 * x], autorange=False)
-        fig.update_yaxes(range=[-half, half], autorange=False)
     return fig
 
 

@@ -70,7 +70,7 @@ def test_run_analysis_core_produces_result_payload():
     payload, error = compute_payload(form, lambda d, t: progress.append((d, t)))
     assert error is None
     assert payload["section_indices"] == [1, 2, 3]
-    assert progress and progress[-1] == (3, 3)
+    assert progress and progress[-1] == (6, 6)  # energy sweep (3) + S-param sweep (3)
 
 
 def test_render_plots_from_payload():

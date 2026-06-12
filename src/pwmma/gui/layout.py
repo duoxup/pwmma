@@ -58,33 +58,44 @@ def build_layout() -> html.Div:
         ),
         html.Hr(style=_HR),
 
-        html.Label("Frequency sweep", style=_LABEL),
-        html.Div([
-            _field("start", dcc.Input(id="f-start", type="number", value=28.0, style=_NUM)),
-            _field("stop", dcc.Input(id="f-stop", type="number", value=34.0, style=_NUM)),
-            _field("points", dcc.Input(id="f-n", type="number", value=61, style=_NUM)),
-            html.Span("GHz", style={"color": "#888", "fontSize": "12px", "paddingBottom": "4px"}),
-        ], style=_ROW),
-        html.Hr(style=_HR),
-
         html.Label("Config", style=_LABEL),
         html.Div([
             _field("cm nproc", dcc.Input(id="cm-nproc", type="number", value=8, style=_NUM)),
             _field("sm nproc", dcc.Input(id="sm-nproc", type="number", value=8, style=_NUM)),
-            _field("precision", dcc.Dropdown(id="precision", options=["complex64", "complex128"],
-                                            value="complex64", clearable=False,
-                                            style={"width": "120px"})),
+            _field("precision", dcc.Dropdown(id="precision", options=["single", "double"],
+                                            value="single", clearable=False,
+                                            style={"width": "110px"})),
             dcc.Checklist(id="use-gpu", options=[{"label": " GPU", "value": "gpu"}],
                           value=["gpu"], style={"paddingBottom": "4px"}),
         ], style=_ROW),
-        # cache settings will be added to this Config block later
+        html.Div([
+            html.Span("Coupling-matrix cache", style={"fontSize": "11px", "color": "#888"}),
+            dcc.Checklist(id="cm-cache-enable",
+                          options=[{"label": " enable disk cache (coming soon)", "value": "on"}],
+                          value=[], style={"display": "inline-block"}),
+            dcc.Input(id="cm-cache-dir", type="text", placeholder="cache directory",
+                      disabled=True, style={"width": "180px"}),
+        ], style={"display": "flex", "gap": "8px", "alignItems": "center",
+                  "marginTop": "4px", "opacity": "0.6"}),
         html.Hr(style=_HR),
 
-        html.Button("▶ Run", id="run-button", n_clicks=0,
-                    style={"width": "100%", "padding": "10px", "fontSize": "1.1em",
-                           "fontWeight": "bold", "cursor": "pointer"}),
-        html.Progress(id="run-progress", value="0", max="100",
-                      style={"width": "100%", "marginTop": "6px"}),
+        html.Label("Frequency sweep", style=_LABEL),
+        html.Div([
+            html.Div([
+                _field("start", dcc.Input(id="f-start", type="number", value=28.0, style=_NUM)),
+                _field("stop", dcc.Input(id="f-stop", type="number", value=34.0, style=_NUM)),
+                _field("points", dcc.Input(id="f-n", type="number", value=61, style=_NUM)),
+                html.Span("GHz", style={"color": "#888", "fontSize": "12px",
+                                        "paddingBottom": "4px"}),
+            ], style={"display": "flex", "gap": "10px", "alignItems": "flex-end"}),
+            html.Button("▶ Run", id="run-button", n_clicks=0,
+                        style={"padding": "10px 24px", "fontSize": "1.1em", "fontWeight": "bold",
+                               "cursor": "pointer", "alignSelf": "flex-end"}),
+        ], style={"display": "flex", "gap": "16px", "alignItems": "flex-end",
+                  "justifyContent": "space-between", "flexWrap": "wrap"}),
+        html.Hr(style=_HR),
+
+        html.Progress(id="run-progress", value="0", max="100", style={"width": "100%"}),
         html.Div(id="run-status", style={"fontSize": "12px", "color": "#555", "minHeight": "16px"}),
     ], style={"flex": "0 0 42%", "display": "flex", "flexDirection": "column", "gap": "6px"})
 

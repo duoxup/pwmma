@@ -34,12 +34,14 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8050)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--debug", action="store_true",
+                        help="enable Dash dev tools + hot reload (auto-reload on code change)")
     args = parser.parse_args()
     app = create_app()
     if not args.no_browser:
         url = f"http://localhost:{args.port}"
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    app.run(host=args.host, port=args.port)
+    app.run(host=args.host, port=args.port, debug=args.debug)
 
 
 if __name__ == "__main__":

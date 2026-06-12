@@ -76,13 +76,14 @@ def parse_freqs(start_ghz, stop_ghz, n_points) -> np.ndarray:
 
 
 def parse_config(cm: dict, sm: dict) -> Config:
-    precision = str(sm.get("precision", "complex64"))
+    # Accept the GUI's "single"/"double" labels (and the raw numpy names).
+    precision = str(sm.get("precision", "single"))
     return Config(
         cmconf=CMConfig(nproc=int(cm.get("nproc", 8))),
         smconf=SMConfig(
             nproc=int(sm.get("nproc", 8)),
             use_gpu=bool(sm.get("use_gpu", True)),
-            use_double_precision=(precision == "complex128"),
+            use_double_precision=(precision in ("double", "complex128")),
         ),
     )
 
