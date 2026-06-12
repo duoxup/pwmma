@@ -25,3 +25,4 @@ venv/
 
 # Personal scratch / experiments — never tracked
 local/
+.superpowers/
