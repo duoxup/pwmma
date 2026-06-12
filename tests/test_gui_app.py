@@ -162,3 +162,18 @@ def test_assets_css_present_and_packaged():
     # the wheel must ship the assets dir (setuptools package-data)
     pyproject = Path(gui.__file__).parents[3] / "pyproject.toml"  # src layout: repo root
     assert '"pwmma.gui" = ["assets/*"]' in pyproject.read_text(encoding="utf-8")
+
+
+def test_figures_use_shared_eda_theme():
+    import numpy as np
+
+    from pwmma.gui import figures
+
+    fig = figures.empty_figure("x")
+    assert fig.layout.plot_bgcolor == "#ffffff"
+
+    spars = {"freqs": np.array([28e9, 29e9]),
+             "s11": np.full((2, 1, 1), 0.5 + 0j), "s21": np.full((2, 1, 1), 0.5 + 0j)}
+    fig2 = figures.sparam_figure(spars)
+    assert fig2.layout.colorway[0] == "#1d5a9e"
+    assert fig2.layout.xaxis.gridcolor == "#eef0f4"

@@ -6,6 +6,27 @@ import plotly.graph_objects as go
 
 _METAL = "#b3c7e6"
 _DIELECTRIC = "#e6c9a8"
+_OUTLINE = "#1d5a9e"        # structure outline (accent steel blue)
+_OUTLINE_MIRROR = "#8a93a3"  # mirrored half of a symmetric chain
+
+_COLORWAY = ["#1d5a9e", "#c0392b", "#27824f", "#b8860b", "#6d4fa3", "#16828c"]
+_GRID = "#eef0f4"
+_AXIS = "#c8ccd4"
+
+
+def _theme(fig: go.Figure, *, axes: bool = True) -> go.Figure:
+    """Shared EDA look: white plot area, light grid, palette colorway."""
+    fig.update_layout(
+        plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
+        font=dict(family="Segoe UI, system-ui, sans-serif", size=12, color="#41506b"),
+        colorway=_COLORWAY,
+    )
+    if axes:
+        fig.update_xaxes(gridcolor=_GRID, zerolinecolor="#d4d8df",
+                         linecolor=_AXIS, mirror=True, ticks="outside", tickcolor=_AXIS)
+        fig.update_yaxes(gridcolor=_GRID, zerolinecolor="#d4d8df",
+                         linecolor=_AXIS, mirror=True, ticks="outside", tickcolor=_AXIS)
+    return fig
 
 
 def _aperture_mm(row: dict) -> float:
@@ -43,7 +64,7 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
             x1=x + length,
             y0=-ap / 2,
             y1=ap / 2,
-            line=dict(color="#888", dash="dash" if is_mirror else "solid"),
+            line=dict(color=_OUTLINE_MIRROR if is_mirror else _OUTLINE, dash="dash" if is_mirror else "solid"),
             fillcolor=fill,
             opacity=0.5 if is_mirror else 0.9,
             layer="below",
@@ -65,7 +86,7 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
         showlegend=False,
         plot_bgcolor="white",
     )
-    return fig
+    return _theme(fig, axes=False)
 
 
 def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
@@ -85,7 +106,7 @@ def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
         yaxis_title="Magnitude (dB)",
         legend=dict(orientation="h"),
     )
-    return fig
+    return _theme(fig)
 
 
 def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True) -> go.Figure:
@@ -98,7 +119,7 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
         y = np.where(section.propagating_mask[:, mode_id], section.modal_power[:, mode_id], np.nan)
         fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines", name=label))
     fig.add_trace(go.Scatter(x=freqs_ghz, y=section.total_propagating_power,
-                             mode="lines", name="Σ prop.", line=dict(dash="dash", color="black")))
+                             mode="lines", name="Σ prop.", line=dict(dash="dash", color="#1a1d21")))
     fig.update_layout(
         height=528, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Net modal power",
@@ -106,7 +127,7 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
     )
     if dB:
         fig.update_yaxes(type="log")
-    return fig
+    return _theme(fig)
 
 
 def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure:
@@ -124,11 +145,11 @@ def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure
         height=528, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Mode index",
     )
-    return fig
+    return _theme(fig)
 
 
 def empty_figure(message: str) -> go.Figure:
     fig = go.Figure()
-    fig.add_annotation(text=message, showarrow=False, font=dict(size=16, color="#999"))
+    fig.add_annotation(text=message, showarrow=False, font=dict(size=16, color="#aab0bb"))
     fig.update_layout(height=528, xaxis=dict(visible=False), yaxis=dict(visible=False))
-    return fig
+    return _theme(fig, axes=False)
