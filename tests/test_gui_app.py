@@ -160,6 +160,5 @@ def test_assets_css_present_and_packaged():
                    ".led-sweep", ".eda-tab", "--accent"]:
         assert needle in text, f"style.css missing {needle}"
     # the wheel must ship the assets dir (setuptools package-data)
-    pyproject = Path(gui.__file__).parents[3].parent / "pyproject.toml"
-    pyproject = pyproject if pyproject.is_file() else Path("pyproject.toml")
+    pyproject = Path(gui.__file__).parents[3] / "pyproject.toml"  # src layout: repo root
     assert '"pwmma.gui" = ["assets/*"]' in pyproject.read_text(encoding="utf-8")
