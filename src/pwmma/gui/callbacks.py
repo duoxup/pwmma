@@ -163,11 +163,16 @@ def render_energy(payload, *, section, kind, threshold, db):
 
 
 def tab_visibility(tab):
-    """Styles for (sparam-graph, energy-graph, energy-controls) given the active tab."""
+    """Styles for (sparam-graph, energy-graph, energy-controls) given the active tab.
+
+    Graphs are display-toggled (the hidden one collapses). The energy controls
+    use visibility instead, so their vertical space is reserved in both tabs and
+    the graph below them keeps a stable position when switching tabs.
+    """
     show, hide = {"display": "block"}, {"display": "none"}
     if tab == "spars":
-        return show, hide, hide
-    return hide, show, show
+        return show, hide, {"visibility": "hidden"}
+    return hide, show, {"visibility": "visible"}
 
 
 def register_plot_callbacks(app):

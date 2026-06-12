@@ -125,7 +125,8 @@ def test_tab_visibility_switches_views():
     spars, energy_graph, energy_controls = tab_visibility("spars")
     assert spars["display"] == "block"
     assert energy_graph["display"] == "none"
+    assert energy_controls["visibility"] == "hidden"
     spars, energy_graph, energy_controls = tab_visibility("energy")
     assert spars["display"] == "none"
     assert energy_graph["display"] == "block"
-    assert energy_controls["display"] == "block"
+    assert energy_controls["visibility"] == "visible"
