@@ -35,7 +35,6 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
         except (TypeError, ValueError):
             continue
         max_ap = max(max_ap, ap)
-        kind = str(row.get("kind", "rec")).lower()
         is_dielectric = abs(complex(str(row.get("er", "1") or "1"))) > 1.0001
         fill = _DIELECTRIC if is_dielectric else _METAL
         fig.add_shape(
@@ -49,9 +48,6 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
             opacity=0.5 if is_mirror else 0.9,
             layer="below",
         )
-        # cross-section hint: ○ for circular, ▭ for rectangular
-        fig.add_annotation(x=x + length / 2, y=0, text="○" if kind == "cir" else "▭",
-                           showarrow=False, font=dict(size=11, color="#333"))
         x += length
     if segments and x > 0:
         # An invisible trace pins the data extent; combined with equal-aspect
