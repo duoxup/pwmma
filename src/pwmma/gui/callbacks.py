@@ -6,12 +6,11 @@ from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
 from . import adapter, defaults, figures
 
-# Column spec shared with layout's header so the rows line up like a table.
-# (label, pixel width). 'a/r' holds rectangular width a or circular radius r;
-# 'b' is rectangular-only (shown disabled for circular guides).
-# (label, flex). 'Type' has a fixed basis; the parameter fields flex to fill the
-# block (equal width); 'N' gets ~20% more than the others. Header and rows share
-# these so the columns line up.
+# Column spec (label, flex) shared by render_chain_header and render_chain_rows
+# so the columns line up like a table. 'Type' has a fixed basis; the parameter
+# fields flex to fill the block (equal width) with 'N' ~20% wider. 'a/r' holds
+# rectangular width a or circular radius r; 'b' is rectangular-only (disabled
+# for circular guides).
 CHAIN_COLUMNS = [("Type", "0 0 72px"), ("a/r", "1"), ("b", "1"), ("l", "1"),
                  ("N", "1.2"), ("εr", "1"), ("σ", "1")]
 _TRAILING_FIELDS = [("l", "1"), ("N", "1.2"), ("er", "1"), ("sigma", "1")]
