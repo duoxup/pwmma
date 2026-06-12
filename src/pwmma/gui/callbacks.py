@@ -17,31 +17,38 @@ CHAIN_COLUMNS = [("Type", "0 0 72px"), ("a/r", "1"), ("b", "1"), ("l", "1"),
 _TRAILING_FIELDS = [("l", "1"), ("N", "1.2"), ("er", "1"), ("sigma", "1")]
 
 
+def render_chain_header() -> html.Div:
+    """Sticky grid-header row; shares CHAIN_COLUMNS flex values with the rows."""
+    cells = [html.Div(name, style={"flex": fl}) for name, fl in CHAIN_COLUMNS]
+    cells.append(html.Div(style={"flex": "0 0 26px"}))  # over the delete column
+    return html.Div(cells, className="chain-head")
+
+
 def render_chain_rows(rows: list[dict]) -> list:
-    flex1 = {"flex": "1", "minWidth": "0"}
     children = []
     for i, row in enumerate(rows):
         kind = str(row.get("kind", "rec")).lower()
         first = "a" if kind == "rec" else "r"
+
+        def cell(f: str, fl: str, *, i=i, row=row):
+            return dcc.Input(id={"role": "wg-field", "i": i, "f": f}, type="text",
+                             debounce=True, value=str(row.get(f, "")), style={"flex": fl})
+
         cells = [
-            dcc.Dropdown(id={"role": "wg-kind", "i": i}, options=["rec", "cir"],
-                         value=kind, clearable=False, style={"flex": "0 0 72px"}),
-            dcc.Input(id={"role": "wg-field", "i": i, "f": first}, type="text", debounce=True,
-                      value=str(row.get(first, "")), style=flex1),
+            html.Div(dcc.Dropdown(id={"role": "wg-kind", "i": i}, options=["rec", "cir"],
+                                  value=kind, clearable=False, className="chain-kind"),
+                     style={"flex": "0 0 72px"}),
+            cell(first, "1"),
         ]
         if kind == "rec":
-            cells.append(dcc.Input(id={"role": "wg-field", "i": i, "f": "b"}, type="text",
-                                   debounce=True, value=str(row.get("b", "")), style=flex1))
+            cells.append(cell("b", "1"))
         else:
-            cells.append(dcc.Input(value="—", disabled=True, style=flex1))
+            cells.append(dcc.Input(value="—", disabled=True, style={"flex": "1"}))
         for f, fl in _TRAILING_FIELDS:
-            cells.append(dcc.Input(id={"role": "wg-field", "i": i, "f": f}, type="text",
-                                   debounce=True, value=str(row.get(f, "")),
-                                   style={"flex": fl, "minWidth": "0"}))
+            cells.append(cell(f, fl))
         cells.append(html.Button("✕", id={"role": "wg-del", "i": i}, n_clicks=0,
-                                 style={"flex": "0 0 26px"}))
-        children.append(html.Div(cells, style={"display": "flex", "gap": "4px",
-                                               "alignItems": "center", "marginBottom": "3px"}))
+                                 className="chain-del"))
+        children.append(html.Div(cells, className="chain-row"))
     return children
 
 
@@ -113,6 +120,15 @@ def register_callbacks(app):
         })
         return n
 
+    @app.callback(
+        Output("config-summary", "children"),
+        Input("use-gpu", "value"), Input("precision", "value"),
+        Input("cm-nproc", "value"), Input("sm-nproc", "value"),
+    )
+    def _config_summary(use_gpu, precision, cm_nproc, sm_nproc):
+        device = "GPU" if use_gpu else "CPU"
+        return f"{device} · {precision} · {cm_nproc}/{sm_nproc} proc"
+
     # transient button feedback: flash "saved ✓" then revert (browser-side timer)
     app.clientside_callback(
         """
@@ -121,7 +137,7 @@ def register_callbacks(app):
                 var b = document.getElementById('save-default');
                 if (b) {
                     b.textContent = 'saved ✓';
-                    setTimeout(function() { b.textContent = 'save as default'; }, 1400);
+                    setTimeout(function() { b.textContent = '💾 Save as default'; }, 1400);
                 }
             }
             return window.dash_clientside.no_update;
@@ -131,6 +147,23 @@ def register_callbacks(app):
         Input("save-default", "n_clicks"),
         prevent_initial_call=True,
     )
+
+
+def sweep_progress(done, total, f_start, f_stop, f_n):
+    """Status-bar payload (text, bar value, bar max, LED class) for one sweep tick.
+
+    ``done`` counts 1..2n across the energy and S-parameter sweeps, so the
+    displayed frequency runs through the sweep twice.
+    """
+    text = f"sweeping {done}/{total}"
+    try:
+        n = int(f_n)
+        idx = (int(done) - 1) % n
+        f = float(f_start) + idx * (float(f_stop) - float(f_start)) / max(n - 1, 1)
+        text += f" — {f:.3f} GHz"
+    except (TypeError, ValueError):
+        pass
+    return text, str(done), str(total), "led led-sweep"
 
 
 def compute_payload(form: dict, progress_callback, status_callback=None):
@@ -187,7 +220,8 @@ def register_run_callback(app):
         background=True,
         running=[(Output("run-button", "disabled"), True, False)],
         progress=[Output("run-status", "children"),
-                  Output("run-progress", "value"), Output("run-progress", "max")],
+                  Output("run-progress", "value"), Output("run-progress", "max"),
+                  Output("run-led", "className")],
         prevent_initial_call=True,
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
@@ -200,19 +234,20 @@ def register_run_callback(app):
 
         def status(phase):
             if phase == "cm":
-                set_progress(("🟡 computing coupling matrices…", "0", bar_max))
+                set_progress(("computing coupling matrices…", "0", bar_max, "led led-cm"))
             else:  # "sweep"
-                set_progress(("🟢 sweeping frequencies…", "0", bar_max))
+                set_progress(("sweeping frequencies…", "0", bar_max, "led led-sweep"))
 
         def progress(done, tot):
-            set_progress((f"🟢 sweeping frequencies {done}/{tot}", str(done), str(tot)))
+            set_progress(sweep_progress(done, tot, f_start, f_stop, f_n))
 
         payload, error = compute_payload(form, progress, status_callback=status)
         if error is not None:
+            set_progress(("error — see message panel", "0", bar_max, "led led-error"))
             return None, error
         token = f"run-{n_clicks}"
         app._pwmma_cache.set(token, payload)
-        set_progress(("✅ done", bar_max, bar_max))
+        set_progress(("done", bar_max, bar_max, "led led-done"))
         return {"token": token, "section_indices": payload["section_indices"]}, ""
 
 

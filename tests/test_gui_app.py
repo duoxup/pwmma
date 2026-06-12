@@ -177,3 +177,24 @@ def test_figures_use_shared_eda_theme():
     fig2 = figures.sparam_figure(spars)
     assert fig2.layout.colorway[0] == "#1d5a9e"
     assert fig2.layout.xaxis.gridcolor == "#eef0f4"
+
+
+def test_sweep_progress_reports_current_frequency():
+    from pwmma.gui.callbacks import sweep_progress
+
+    text, value, vmax, led = sweep_progress(38, 122, 28.0, 34.0, 61)
+    assert (value, vmax) == ("38", "122")
+    assert led == "led led-sweep"
+    assert "31.700 GHz" in text  # idx 37 of 28..34 GHz / 61 pts
+
+    # the S-parameter sweep (second half) wraps back to the sweep start
+    text2, *_ = sweep_progress(62, 122, 28.0, 34.0, 61)
+    assert "28.000 GHz" in text2
+
+
+def test_sweep_progress_tolerates_bad_inputs():
+    from pwmma.gui.callbacks import sweep_progress
+
+    text, value, vmax, led = sweep_progress(1, 2, None, None, None)
+    assert text.startswith("sweeping 1/2")
+    assert led == "led led-sweep"
