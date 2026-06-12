@@ -23,11 +23,15 @@ def _field(label: str, component) -> html.Div:
 
 def _chain_header() -> html.Div:
     cells = [
-        html.Div(name, style={"width": f"{w}px", "fontSize": "11px",
-                              "fontWeight": "bold", "color": "#666"})
-        for name, w in CHAIN_COLUMNS
+        html.Div(name, style={"flex": fl, "minWidth": "0", "fontSize": "11px",
+                              "fontWeight": "bold", "color": "#666", "overflow": "hidden"})
+        for name, fl in CHAIN_COLUMNS
     ]
-    return html.Div(cells, style={"display": "flex", "gap": "4px", "padding": "2px 0"})
+    cells.append(html.Div(style={"flex": "0 0 26px"}))  # align with the row's delete button
+    # sticky inside the scroll area: stays put and never drifts from the rows by the scrollbar
+    return html.Div(cells, style={"display": "flex", "gap": "4px", "padding": "2px 0",
+                                  "position": "sticky", "top": "0", "background": "#fff",
+                                  "zIndex": "1"})
 
 
 def build_layout() -> html.Div:
@@ -39,10 +43,11 @@ def build_layout() -> html.Div:
         html.Hr(style=_HR),
 
         html.Label("Waveguide chain", style=_LABEL),
-        _chain_header(),
-        html.Div(id="chain-rows", children=render_chain_rows(d["rows"]),
-                 style={"height": "200px", "overflowY": "auto",
-                        "border": "1px solid #eee", "padding": "2px"}),
+        html.Div([
+            _chain_header(),
+            html.Div(id="chain-rows", children=render_chain_rows(d["rows"])),
+        ], style={"height": "200px", "overflowY": "auto", "overflowX": "hidden",
+                  "border": "1px solid #eee", "padding": "2px"}),
         html.Div([
             html.Button("+ add waveguide", id="add-wg", n_clicks=0),
             dcc.Checklist(id="sym", options=[{"label": " symmetric (sym)", "value": "sym"}],
