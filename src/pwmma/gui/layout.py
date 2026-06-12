@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dash import dcc, html
 
-from .callbacks import CHAIN_COLUMNS
+from .callbacks import CHAIN_COLUMNS, render_chain_rows
 
 _DEFAULT_ROWS = [
     {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 200, "er": "1", "sigma": "5.8e7"},
@@ -44,8 +44,9 @@ def build_layout() -> html.Div:
 
         html.Label("Waveguide chain", style=_LABEL),
         _chain_header(),
-        html.Div(id="chain-rows", style={"height": "200px", "overflowY": "auto",
-                                         "border": "1px solid #eee", "padding": "2px"}),
+        html.Div(id="chain-rows", children=render_chain_rows(_DEFAULT_ROWS),
+                 style={"height": "200px", "overflowY": "auto",
+                        "border": "1px solid #eee", "padding": "2px"}),
         html.Div([
             html.Button("+ add waveguide", id="add-wg", n_clicks=0),
             dcc.Checklist(id="sym", options=[{"label": " symmetric (sym)", "value": "sym"}],

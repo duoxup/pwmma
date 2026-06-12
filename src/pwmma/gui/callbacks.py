@@ -2,7 +2,7 @@
 """Thin Dash callbacks; all logic delegates to adapter/figures."""
 from __future__ import annotations
 
-from dash import ALL, Input, Output, State, ctx, dcc, html
+from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
 from . import adapter, figures
 
@@ -22,17 +22,19 @@ def render_chain_rows(rows: list[dict]) -> list:
         cells = [
             dcc.Dropdown(id={"role": "wg-kind", "i": i}, options=["rec", "cir"],
                          value=kind, clearable=False, style={"width": "72px"}),
-            dcc.Input(id={"role": "wg-field", "i": i, "f": first}, type="text",
+            dcc.Input(id={"role": "wg-field", "i": i, "f": first}, type="text", debounce=True,
                       value=str(row.get(first, "")), style={"width": "60px"}),
         ]
         if kind == "rec":
             cells.append(dcc.Input(id={"role": "wg-field", "i": i, "f": "b"}, type="text",
-                                   value=str(row.get("b", "")), style={"width": "60px"}))
+                                   debounce=True, value=str(row.get("b", "")),
+                                   style={"width": "60px"}))
         else:
             cells.append(dcc.Input(value="—", disabled=True, style={"width": "60px"}))
         for f, w in _TRAILING_FIELDS:
             cells.append(dcc.Input(id={"role": "wg-field", "i": i, "f": f}, type="text",
-                                   value=str(row.get(f, "")), style={"width": f"{w}px"}))
+                                   debounce=True, value=str(row.get(f, "")),
+                                   style={"width": f"{w}px"}))
         cells.append(html.Button("✕", id={"role": "wg-del", "i": i}, n_clicks=0,
                                  style={"width": "28px"}))
         children.append(html.Div(cells, style={"display": "flex", "gap": "4px",
@@ -45,10 +47,6 @@ def update_structure_preview(rows, sym_value):
 
 
 def register_callbacks(app):
-    @app.callback(Output("chain-rows", "children"), Input("chain-store", "data"))
-    def _render(rows):
-        return render_chain_rows(rows or [])
-
     @app.callback(
         Output("structure-preview", "figure"),
         Input("chain-store", "data"),
@@ -59,6 +57,7 @@ def register_callbacks(app):
 
     @app.callback(
         Output("chain-store", "data"),
+        Output("chain-rows", "children"),
         Input("add-wg", "n_clicks"),
         Input({"role": "wg-del", "i": ALL}, "n_clicks"),
         Input({"role": "wg-kind", "i": ALL}, "value"),
@@ -68,24 +67,27 @@ def register_callbacks(app):
     )
     def _edit(add_clicks, del_clicks, kinds, field_values, rows):
         rows = list(rows or [])
-        trig = ctx.triggered_id
-        if trig == "add-wg":
-            rows.append(
-                {"kind": "cir", "r": 4.2, "l": 1.0, "N": 64, "er": "1", "sigma": "5.8e7"}
-            )
-            return rows
-        if isinstance(trig, dict) and trig.get("role") == "wg-del":
-            i = trig["i"]
-            if 0 <= i < len(rows):
-                rows.pop(i)
-            return rows
-        # field / kind edits: rebuild from the live input states
+        # sync the live input values into the chain data
         for inp in ctx.inputs_list[3]:  # wg-field inputs
             cid = inp["id"]
-            rows[cid["i"]][cid["f"]] = inp.get("value", "")
+            if cid["i"] < len(rows):
+                rows[cid["i"]][cid["f"]] = inp.get("value", "")
         for inp in ctx.inputs_list[2]:  # wg-kind inputs
-            rows[inp["id"]["i"]]["kind"] = inp.get("value", "cir")
-        return rows
+            if inp["id"]["i"] < len(rows):
+                rows[inp["id"]["i"]]["kind"] = inp.get("value", "cir")
+        trig = ctx.triggered_id
+        if trig == "add-wg":
+            rows.append({"kind": "cir", "r": 4.2, "l": 1.0, "N": 64, "er": "1", "sigma": "5.8e7"})
+            return rows, render_chain_rows(rows)
+        if isinstance(trig, dict) and trig.get("role") in ("wg-del", "wg-kind"):
+            if trig["role"] == "wg-del":
+                i = trig["i"]
+                if 0 <= i < len(rows):
+                    rows.pop(i)
+            # row removed, or kind switched (different fields) -> rebuild that area
+            return rows, render_chain_rows(rows)
+        # a plain value edit: update data only, keep the inputs (no rebuild = no focus loss)
+        return rows, no_update
 
 
 def compute_payload(form: dict, progress_callback, status_callback=None):
