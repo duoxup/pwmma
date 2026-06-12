@@ -19,6 +19,8 @@
 
 html, body { margin: 0; padding: 0; background: var(--win-bg); }
 
+*, *::before, *::after { box-sizing: border-box; }
+
 #app-root {
   font-family: var(--font-ui);
   color: var(--text);
@@ -78,7 +80,7 @@ fieldset.group > legend {
 button {
   font-family: var(--font-ui); font-size: 12px; color: var(--text);
   background: linear-gradient(#ffffff, #eceef2);
-  border: 1px solid #aab0bb; border-radius: 3px;
+  border: 1px solid var(--text-disabled); border-radius: 3px;
   padding: 4px 12px; cursor: pointer;
 }
 button:hover { background: linear-gradient(#ffffff, #f3f5f8); border-color: #8a93a3; }
@@ -86,12 +88,12 @@ button:active { background: linear-gradient(#e4e7ec, #eef0f3); }
 button:disabled { color: var(--text-disabled); background: #f0f1f4; cursor: default; }
 
 button.btn-primary {
-  background: linear-gradient(#2e74c0, #1d5a9e);
+  background: linear-gradient(var(--accent-2), var(--accent));
   border-color: var(--accent-dark); color: #fff; font-weight: 600;
   padding: 4px 18px;
 }
 button.btn-primary:hover { background: linear-gradient(#3d83cf, #2363a9); }
-button.btn-primary:active { background: linear-gradient(#1d5a9e, #2e74c0); }
+button.btn-primary:active { background: linear-gradient(var(--accent), var(--accent-2)); }
 button.btn-primary:disabled {
   background: linear-gradient(#9db9d8, #8aa9c9);
   border-color: #7f9cba; color: #e8eef5;
@@ -101,7 +103,7 @@ button.btn-small { font-size: 11px; padding: 3px 10px; }
 /* ---------- inputs ---------- */
 input:not([type="checkbox"]):not([type="radio"]) {
   font-family: var(--font-num); font-size: 12px; color: var(--text);
-  background: #fff; border: 1px solid #aab0bb; border-radius: 2px;
+  background: #fff; border: 1px solid var(--text-disabled); border-radius: 2px;
   padding: 3px 6px;
 }
 input:focus { outline: 1px solid var(--accent-2); outline-offset: -1px; }
@@ -168,9 +170,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .dd-small { width: 110px; font-size: 12px; }
 .dd-small .Select-control,
 .dd-small [class$="-control"] {
-  border: 1px solid #aab0bb; border-radius: 2px; min-height: 26px; height: 26px;
+  border: 1px solid var(--text-disabled); border-radius: 2px; min-height: 26px; height: 26px;
 }
-.Select-menu-outer, [class$="-menu"] { font-size: 12px; }
+.dd-small .Select-menu-outer, .chain-kind .Select-menu-outer,
+.dd-small [class$="-menu"], .chain-kind [class$="-menu"] { font-size: 12px; }
 
 /* ---------- slider (rc-slider) ---------- */
 .slider-box { width: 140px; padding-bottom: 2px; }
@@ -238,14 +241,14 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 progress.eda-progress {
   width: 180px; height: 10px;
   -webkit-appearance: none; appearance: none;
-  border: 1px solid #aab0bb; border-radius: 2px; background: #fff;
+  border: 1px solid var(--text-disabled); border-radius: 2px; background: #fff;
 }
 progress.eda-progress::-webkit-progress-bar { background: #fff; }
 progress.eda-progress::-webkit-progress-value {
-  background: repeating-linear-gradient(45deg, #2e74c0, #2e74c0 6px, #3d83cf 6px, #3d83cf 12px);
+  background: repeating-linear-gradient(45deg, var(--accent-2), var(--accent-2) 6px, #3d83cf 6px, #3d83cf 12px);
 }
 progress.eda-progress::-moz-progress-bar {
-  background: repeating-linear-gradient(45deg, #2e74c0, #2e74c0 6px, #3d83cf 6px, #3d83cf 12px);
+  background: repeating-linear-gradient(45deg, var(--accent-2), var(--accent-2) 6px, #3d83cf 6px, #3d83cf 12px);
 }
 
 /* ---------- scrollbars ---------- */
