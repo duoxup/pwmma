@@ -22,10 +22,13 @@ def test_layout_has_core_component_ids():
         if isinstance(children, (list, tuple)):
             for child in children:
                 walk(child)
+        elif children is not None:
+            walk(children)
 
     walk(root)
-    for required in ["chain-store", "result-store", "run-button", "structure-preview",
-                     "sparam-graph", "energy-graph", "status"]:
+    for required in ["chain-store", "result-store", "run-button", "save-default",
+                     "structure-preview", "sparam-graph", "energy-graph", "status",
+                     "run-led", "run-status", "run-progress", "config-summary"]:
         assert required in ids, f"missing component id {required}"
 
 

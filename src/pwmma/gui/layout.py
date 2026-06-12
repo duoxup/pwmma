@@ -1,139 +1,165 @@
 # src/pwmma/gui/layout.py
-"""Dash component tree for the pwmma GUI. Built per page load so saved defaults apply."""
+"""Dash component tree for the pwmma GUI. Built per page load so saved defaults apply.
+
+Desktop-EDA skeleton: title bar / toolbar / body (inputs left, results right) /
+status bar. All visual styling lives in assets/style.css; inline styles are
+used only for per-column flex values shared with callbacks.CHAIN_COLUMNS.
+"""
 from __future__ import annotations
 
 from dash import dcc, html
 
 from . import defaults
-from .callbacks import CHAIN_COLUMNS, render_chain_rows
-
-_LABEL = {"fontWeight": "bold", "fontSize": "13px"}
-_HR = {"border": "none", "borderTop": "1px solid #ddd", "margin": "6px 0"}
-_NUM = {"width": "64px"}
-_ROW = {"display": "flex", "gap": "10px", "alignItems": "flex-end", "flexWrap": "wrap"}
+from .callbacks import render_chain_header, render_chain_rows
 
 
 def _field(label: str, component) -> html.Div:
     """A small column label stacked above its input."""
-    return html.Div(
-        [html.Div(label, style={"fontSize": "11px", "color": "#666"}), component],
-        style={"display": "flex", "flexDirection": "column"},
-    )
+    return html.Div([html.Div(label, className="lbl"), component], className="field")
 
 
-def _chain_header() -> html.Div:
-    cells = [
-        html.Div(name, style={"flex": fl, "minWidth": "0", "fontSize": "11px",
-                              "fontWeight": "bold", "color": "#666", "overflow": "hidden"})
-        for name, fl in CHAIN_COLUMNS
-    ]
-    cells.append(html.Div(style={"flex": "0 0 26px"}))  # align with the row's delete button
-    # sticky inside the scroll area: stays put and never drifts from the rows by the scrollbar
-    return html.Div(cells, style={"display": "flex", "gap": "4px", "padding": "2px 0",
-                                  "position": "sticky", "top": "0", "background": "#fff",
-                                  "zIndex": "1"})
+def _titlebar() -> html.Div:
+    return html.Div([
+        html.Div(className="logo"),
+        html.Span("pwmma", className="title"),
+        html.Span("Mode-Matching Analyzer", className="subtitle"),
+    ], className="titlebar")
+
+
+def _toolbar(d: dict) -> html.Div:
+    return html.Div([
+        html.Button("▶ Run", id="run-button", n_clicks=0, className="btn-primary"),
+        html.Button("💾 Save as default", id="save-default", n_clicks=0),
+        html.Div(className="toolbar-sep"),
+        html.Span("precision", className="lbl"),
+        dcc.Dropdown(id="precision", options=["single", "double"],
+                     value=d.get("precision", "single"), clearable=False,
+                     className="dd-small"),
+        dcc.Checklist(id="use-gpu", options=[{"label": " GPU", "value": "gpu"}],
+                      value=d.get("use_gpu", ["gpu"]), className="inline-check"),
+    ], className="toolbar")
+
+
+def _left_panel(d: dict) -> html.Div:
+    return html.Div([
+        html.Fieldset([
+            html.Legend("Structure preview"),
+            dcc.Graph(id="structure-preview", config={"displayModeBar": False},
+                      style={"height": "216px"}),
+        ], className="group"),
+
+        html.Fieldset([
+            html.Legend("Waveguide chain"),
+            html.Div([
+                render_chain_header(),
+                html.Div(id="chain-rows", children=render_chain_rows(d["rows"])),
+            ], className="chain-scroll"),
+            html.Div([
+                html.Button("+ add waveguide", id="add-wg", n_clicks=0,
+                            className="btn-small"),
+                dcc.Checklist(id="sym",
+                              options=[{"label": " symmetric (sym)", "value": "sym"}],
+                              value=d.get("sym", ["sym"]), className="inline-check"),
+            ], className="row", style={"marginTop": "6px"}),
+            html.Div(
+                "a/r = rect width a or circle radius r · b = rect height (rect only) · "
+                "l = length · N = modes · εr = permittivity · σ = wall conductivity. "
+                "Geometry in mm, σ in S/m.",
+                className="hint",
+            ),
+        ], className="group"),
+
+        html.Fieldset([
+            html.Legend("Solver settings"),
+            html.Div([
+                _field("cm nproc", dcc.Input(id="cm-nproc", type="number",
+                                             value=d.get("cm_nproc", 8),
+                                             className="num-input")),
+                _field("sm nproc", dcc.Input(id="sm-nproc", type="number",
+                                             value=d.get("sm_nproc", 8),
+                                             className="num-input")),
+            ], className="row"),
+            html.Div([
+                dcc.Checklist(
+                    id="cm-cache-enable",
+                    options=[{"label": " cache coupling matrices on disk", "value": "on"}],
+                    value=d.get("cm_cache_enable", []), className="inline-check"),
+                dcc.Input(id="cm-cache-dir", type="text",
+                          value=d.get("cm_cache_dir", ".pwmma_cm_cache"),
+                          placeholder="cache directory", className="grow-input"),
+            ], className="row", style={"marginTop": "6px"}),
+        ], className="group"),
+
+        html.Fieldset([
+            html.Legend("Frequency sweep"),
+            html.Div([
+                _field("start", dcc.Input(id="f-start", type="number",
+                                          value=d.get("f_start", 28.0),
+                                          className="num-input")),
+                html.Span("–", className="lbl range-dash"),
+                _field("stop", dcc.Input(id="f-stop", type="number",
+                                         value=d.get("f_stop", 34.0),
+                                         className="num-input")),
+                html.Span("GHz ×", className="lbl range-dash"),
+                _field("points", dcc.Input(id="f-n", type="number",
+                                           value=d.get("f_n", 61),
+                                           className="num-input")),
+            ], className="row"),
+        ], className="group"),
+    ], className="left-panel")
+
+
+def _right_panel() -> html.Div:
+    return html.Div([
+        dcc.Tabs(id="result-tab", value="energy", className="eda-tabs", children=[
+            dcc.Tab(label="S-parameters", value="spars",
+                    className="eda-tab", selected_className="eda-tab--selected"),
+            dcc.Tab(label="Energy coupling", value="energy",
+                    className="eda-tab", selected_className="eda-tab--selected"),
+        ]),
+        html.Div([
+            html.Div([
+                html.Span("section", className="lbl"),
+                dcc.Dropdown(id="section-select", placeholder="section",
+                             className="dd-small"),
+                dcc.RadioItems(id="plot-kind", options=["line", "heatmap"],
+                               value="line", inline=True, className="inline-check"),
+                html.Div(dcc.Slider(id="mode-threshold", min=0.0, max=0.2,
+                                    step=0.01, value=0.04), className="slider-box"),
+                dcc.Checklist(id="db-toggle", options=[{"label": " dB", "value": "db"}],
+                              value=["db"], className="inline-check"),
+            ], id="energy-controls", className="energy-controls-row"),
+            dcc.Graph(id="sparam-graph"),
+            dcc.Graph(id="energy-graph"),
+            html.Div(id="status", className="error-text"),
+        ], className="plot-frame"),
+    ], className="right-panel")
+
+
+def _statusbar() -> html.Div:
+    return html.Div([
+        html.Div([
+            html.Span(id="run-led", className="led led-idle"),
+            html.Span("idle", id="run-status"),
+        ], className="cell"),
+        html.Div([
+            html.Progress(id="run-progress", value="0", max="100",
+                          className="eda-progress"),
+        ], className="cell"),
+        html.Div([
+            html.Span(id="config-summary", className="num"),
+        ], className="cell grow"),
+    ], className="statusbar")
 
 
 def build_layout() -> html.Div:
     d = defaults.load_defaults()
-    left = html.Div([
-        html.Label("Structure preview", style=_LABEL),
-        dcc.Graph(id="structure-preview", config={"displayModeBar": False},
-                  style={"height": "216px"}),
-        html.Hr(style=_HR),
-
-        html.Label("Waveguide chain", style=_LABEL),
-        html.Div([
-            _chain_header(),
-            html.Div(id="chain-rows", children=render_chain_rows(d["rows"])),
-        ], style={"height": "200px", "overflowY": "auto", "overflowX": "hidden",
-                  "border": "1px solid #eee", "padding": "2px"}),
-        html.Div([
-            html.Button("+ add waveguide", id="add-wg", n_clicks=0),
-            dcc.Checklist(id="sym", options=[{"label": " symmetric (sym)", "value": "sym"}],
-                          value=d.get("sym", ["sym"]), style={"display": "inline-block"}),
-        ], style={"display": "flex", "gap": "12px", "alignItems": "center", "marginTop": "4px"}),
-        html.Div(
-            "a/r = rect width a or circle radius r · b = rect height (rect only) · "
-            "l = length · N = modes · εr = permittivity · σ = wall conductivity. "
-            "Geometry in mm, σ in S/m.",
-            style={"fontSize": "11px", "color": "#888", "marginTop": "2px"},
-        ),
-        html.Hr(style=_HR),
-
-        html.Label("Config", style=_LABEL),
-        html.Div([
-            _field("cm nproc", dcc.Input(id="cm-nproc", type="number",
-                                         value=d.get("cm_nproc", 8), style=_NUM)),
-            _field("sm nproc", dcc.Input(id="sm-nproc", type="number",
-                                         value=d.get("sm_nproc", 8), style=_NUM)),
-            _field("precision", dcc.Dropdown(id="precision", options=["single", "double"],
-                                            value=d.get("precision", "single"), clearable=False,
-                                            style={"width": "110px"})),
-            dcc.Checklist(id="use-gpu", options=[{"label": " GPU", "value": "gpu"}],
-                          value=d.get("use_gpu", ["gpu"]), style={"paddingBottom": "4px"}),
-        ], style=_ROW),
-        html.Div([
-            dcc.Checklist(id="cm-cache-enable",
-                          options=[{"label": " cache coupling matrices on disk", "value": "on"}],
-                          value=d.get("cm_cache_enable", []), style={"display": "inline-block"}),
-            dcc.Input(id="cm-cache-dir", type="text",
-                      value=d.get("cm_cache_dir", ".pwmma_cm_cache"),
-                      placeholder="cache directory", style={"width": "200px"}),
-        ], style={"display": "flex", "gap": "8px", "alignItems": "center", "marginTop": "4px"}),
-        html.Hr(style=_HR),
-
-        html.Label("Frequency sweep", style=_LABEL),
-        html.Div([
-            html.Div([
-                _field("start", dcc.Input(id="f-start", type="number",
-                                          value=d.get("f_start", 28.0), style=_NUM)),
-                _field("stop", dcc.Input(id="f-stop", type="number",
-                                         value=d.get("f_stop", 34.0), style=_NUM)),
-                _field("points", dcc.Input(id="f-n", type="number",
-                                           value=d.get("f_n", 61), style=_NUM)),
-                html.Span("GHz", style={"color": "#888", "fontSize": "12px",
-                                        "paddingBottom": "4px"}),
-            ], style={"display": "flex", "gap": "10px", "alignItems": "flex-end"}),
-            html.Div([
-                html.Button("save as default", id="save-default", n_clicks=0,
-                            style={"padding": "10px 4px", "fontSize": "1em", "cursor": "pointer",
-                                   "width": "155px", "textAlign": "center"}),
-                html.Button("▶ Run", id="run-button", n_clicks=0,
-                            style={"padding": "10px 4px", "fontSize": "1em", "fontWeight": "bold",
-                                   "cursor": "pointer", "width": "155px", "textAlign": "center"}),
-            ], style={"display": "flex", "gap": "8px", "alignItems": "flex-end"}),
-        ], style={"display": "flex", "gap": "16px", "alignItems": "flex-end",
-                  "justifyContent": "space-between", "flexWrap": "wrap"}),
-        html.Hr(style=_HR),
-
-        html.Progress(id="run-progress", value="0", max="100", style={"width": "100%"}),
-        html.Div(id="run-status", children="⚪ idle",
-                 style={"fontSize": "13px", "fontWeight": "500", "minHeight": "18px",
-                        "marginTop": "2px"}),
-    ], style={"flex": "0 0 35%", "minWidth": "480px", "display": "flex",
-              "flexDirection": "column", "gap": "6px"})
-
-    right = html.Div([
-        dcc.Tabs(id="result-tab", value="energy", children=[
-            dcc.Tab(label="S-parameters", value="spars"),
-            dcc.Tab(label="Energy coupling", value="energy"),
-        ]),
-        html.Div([
-            dcc.Dropdown(id="section-select", placeholder="section"),
-            dcc.RadioItems(id="plot-kind", options=["line", "heatmap"], value="line", inline=True),
-            dcc.Slider(id="mode-threshold", min=0.0, max=0.2, step=0.01, value=0.04),
-            dcc.Checklist(id="db-toggle", options=[{"label": "dB", "value": "db"}], value=["db"]),
-        ], id="energy-controls"),
-        dcc.Graph(id="sparam-graph"),
-        dcc.Graph(id="energy-graph"),
-        html.Div(id="status", style={"whiteSpace": "pre-wrap", "color": "#a00"}),
-    ], style={"flex": "1", "display": "flex", "flexDirection": "column", "gap": "8px"})
-
     return html.Div([
-        html.H3("pwmma — Mode-Matching Analyzer"),
+        _titlebar(),
+        _toolbar(d),
+        html.Div([_left_panel(d), _right_panel()], className="app-body"),
+        _statusbar(),
         dcc.Store(id="chain-store", data=d["rows"]),
         dcc.Store(id="result-store"),  # holds a cache token + meta, not the heavy arrays
         dcc.Store(id="save-tick"),  # server output for the "save as default" button
-        html.Div([left, right], style={"display": "flex", "gap": "16px"}),
-    ], style={"fontFamily": "sans-serif", "padding": "12px"})
+    ], id="app-root")
