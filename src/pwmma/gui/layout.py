@@ -39,7 +39,7 @@ def build_layout() -> html.Div:
     left = html.Div([
         html.Label("Structure preview", style=_LABEL),
         dcc.Graph(id="structure-preview", config={"displayModeBar": False},
-                  style={"height": "140px"}),
+                  style={"height": "180px"}),
         html.Hr(style=_HR),
 
         html.Label("Waveguide chain", style=_LABEL),
