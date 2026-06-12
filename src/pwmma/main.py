@@ -32,6 +32,7 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                           config: 'Config',
                           show_progress: bool = True,
                           progress_callback: Callable[[int, int], None] | None = None,
+                          cms: Sequence[np.ndarray] | None = None,
                           ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     cm_config, sm_config = config.cmconf, config.smconf
     cnp = get_array_backend(sm_config.use_gpu)
@@ -49,8 +50,11 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                    pool=pool, chunksize=2048), dtype=dtype) \
                    for wg in wgchain.wgs]
             
-    cms = [cnp.asarray(get_coupling_matrix(wgt, cm_config), dtype=dtype) \
-           for wgt in wgchain.transitions]
+    if cms is None:
+        cms = [cnp.asarray(get_coupling_matrix(wgt, cm_config), dtype=dtype)
+               for wgt in wgchain.transitions]
+    else:
+        cms = [cnp.asarray(c, dtype=dtype) for c in cms]
         
     st11 = []; st12 = []; st21 = []; st22 = []
     for idx_f, f in enumerate(tqdm(freqs, disable=not show_progress)):

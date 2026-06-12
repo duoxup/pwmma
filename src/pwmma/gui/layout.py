@@ -96,6 +96,8 @@ def build_layout() -> html.Div:
                   "justifyContent": "space-between", "flexWrap": "wrap"}),
         html.Hr(style=_HR),
 
+        html.Div(id="cm-light", children="⚪ cm: idle",
+                 style={"fontSize": "13px", "fontWeight": "bold", "marginBottom": "2px"}),
         html.Progress(id="run-progress", value="0", max="100", style={"width": "100%"}),
         html.Div(id="run-status", style={"fontSize": "12px", "color": "#555", "minHeight": "16px"}),
     ], style={"flex": "0 0 35%", "minWidth": "480px", "display": "flex",

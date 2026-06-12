@@ -8,6 +8,7 @@ from waveguides import WG, CirWG, RecWG
 
 from .. import analyze_energy_coupling
 from ..config import CMConfig, Config, SMConfig
+from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
 from ..main import calc_spars_of_wgchain
 
@@ -88,17 +89,22 @@ def parse_config(cm: dict, sm: dict) -> Config:
     )
 
 
+def compute_cms(chain, config):
+    """Raw coupling matrices for the chain's transitions (one per junction)."""
+    return [get_coupling_matrix(wgt, config.cmconf) for wgt in chain.transitions]
+
+
 def run_energy(chain, freqs, config, *, sections, excitation_mode=0,
-               progress_callback: Callable[[int, int], None] | None = None):
+               progress_callback: Callable[[int, int], None] | None = None, cms=None):
     return analyze_energy_coupling(
         chain, freqs, config, sections=sections, excitation_mode=excitation_mode,
-        show_progress=False, progress_callback=progress_callback,
+        show_progress=False, progress_callback=progress_callback, cms=cms,
     )
 
 
 def run_spars(chain, freqs, config,
-              progress_callback: Callable[[int, int], None] | None = None) -> dict:
+              progress_callback: Callable[[int, int], None] | None = None, cms=None) -> dict:
     s11, s12, s21, s22 = calc_spars_of_wgchain(
-        chain, freqs, config, show_progress=False, progress_callback=progress_callback,
+        chain, freqs, config, show_progress=False, progress_callback=progress_callback, cms=cms,
     )
     return {"freqs": np.asarray(freqs), "s11": s11, "s12": s12, "s21": s21, "s22": s22}

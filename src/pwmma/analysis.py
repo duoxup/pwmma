@@ -513,6 +513,7 @@ def analyze_energy_coupling(
     excitation_mode: int = 0,
     show_progress: bool = True,
     progress_callback: Callable[[int, int], None] | None = None,
+    cms: Sequence[np.ndarray] | None = None,
 ) -> ChainEnergyCouplingResult:
     """
     Analyze modal net-power contributions on internal sections of a waveguide chain.
@@ -545,6 +546,9 @@ def analyze_energy_coupling(
     progress_callback:
         Optional callable invoked once per frequency point as
         ``progress_callback(done, total)``. Defaults to ``None``.
+    cms:
+        Optional precomputed coupling matrices (one per base transition). When
+        given, they are used instead of being recomputed. Defaults to ``None``.
 
     Returns
     -------
@@ -594,7 +598,11 @@ def analyze_energy_coupling(
             for wg in lossless_wgs
         ]
 
-    cms = [cnp.asarray(get_coupling_matrix(wgt, cm_config), dtype=dtype) for wgt in base_transitions]
+    if cms is None:
+        cms = [cnp.asarray(get_coupling_matrix(wgt, cm_config), dtype=dtype)
+               for wgt in base_transitions]
+    else:
+        cms = [cnp.asarray(c, dtype=dtype) for c in cms]
 
     per_section = {
         idx: {

@@ -88,8 +88,14 @@ def register_callbacks(app):
         return rows
 
 
-def compute_payload(form: dict, progress_callback):
-    """Pure compute step used by the background callback. Returns (payload, error_str)."""
+def compute_payload(form: dict, progress_callback, status_callback=None):
+    """Pure compute step used by the background callback. Returns (payload, error_str).
+
+    Coupling matrices are computed once and shared by both the energy-coupling
+    and S-parameter sweeps. ``status_callback(phase)`` (optional) is called with
+    ``"cm"`` before the coupling-matrix computation and ``"sweep"`` before the
+    frequency sweeps, so the UI can show the current phase.
+    """
     try:
         chain = adapter.parse_chain(form["rows"], form["sym"])
         freqs = adapter.parse_freqs(form["f_start"], form["f_stop"], form["f_n"])
@@ -104,11 +110,16 @@ def compute_payload(form: dict, progress_callback):
         sections = list(range(1, n_phys - 1)) or None
         n = len(freqs)
         total = 2 * n  # energy sweep + S-parameter sweep share one progress bar
+        if status_callback:
+            status_callback("cm")
+        cms = adapter.compute_cms(chain, cfg)
+        if status_callback:
+            status_callback("sweep")
         result = adapter.run_energy(
-            chain, freqs, cfg, sections=sections,
+            chain, freqs, cfg, sections=sections, cms=cms,
             progress_callback=lambda done, _t: progress_callback(done, total))
         spars = adapter.run_spars(
-            chain, freqs, cfg,
+            chain, freqs, cfg, cms=cms,
             progress_callback=lambda done, _t: progress_callback(n + done, total))
     except (NotImplementedError, ValueError) as exc:
         return None, f"computation failed: {exc}"
@@ -128,7 +139,7 @@ def register_run_callback(app):
                State("use-gpu", "value"), State("precision", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False)],
-        progress=[Output("run-status", "children"),
+        progress=[Output("cm-light", "children"), Output("run-status", "children"),
                   Output("run-progress", "value"), Output("run-progress", "max")],
         prevent_initial_call=True,
     )
@@ -137,13 +148,19 @@ def register_run_callback(app):
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
                 "use_gpu": bool(use_gpu), "precision": precision}
-        total = str(int(f_n) if f_n else 1)
-        set_progress(("Preparing coupling matrices…", "0", total))
+        bar_max = str(2 * int(f_n)) if f_n else "1"
+
+        def status(phase):
+            if phase == "cm":
+                set_progress(("🟡 cm: computing", "Computing coupling matrices…", "0", bar_max))
+            else:  # "sweep"
+                set_progress(("🟢 cm: ready", "Sweeping frequencies…", "0", bar_max))
 
         def progress(done, tot):
-            set_progress((f"Sweeping frequencies {done}/{tot}", str(done), str(tot)))
+            set_progress(("🟢 cm: ready", f"Sweeping frequencies {done}/{tot}",
+                          str(done), str(tot)))
 
-        payload, error = compute_payload(form, progress)
+        payload, error = compute_payload(form, progress, status_callback=status)
         if error is not None:
             return None, error
         token = f"run-{n_clicks}"

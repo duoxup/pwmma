@@ -45,3 +45,25 @@ def test_analyze_energy_coupling_progress_callback_runs_once_per_frequency() -> 
     )
 
     assert calls == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_core_funcs_accept_precomputed_cms() -> None:
+    from pwmma.coupling_matrix import get_coupling_matrix
+
+    rwg = RecWG(a=7.112e-3, b=3.556e-3, l=2e-3, N=24)
+    cwg = CirWG(r=4.2e-3, l=1.5e-3, N=64)
+    dsk = CirWG(r=5.4e-3, l=0.26e-3, N=96, er=9.2)
+    chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
+    freqs = np.linspace(28.0, 34.0, 3) * 1e9
+    cfg = _cpu_config()
+    cms = [get_coupling_matrix(t, cfg.cmconf) for t in chain.transitions]
+
+    # Passing precomputed coupling matrices must give identical results to
+    # computing them internally.
+    a0 = pwmma.analyze_energy_coupling(chain, freqs, cfg, sections=[2], show_progress=False)
+    a1 = pwmma.analyze_energy_coupling(chain, freqs, cfg, sections=[2], show_progress=False, cms=cms)
+    np.testing.assert_allclose(a1.get_section(2).modal_power, a0.get_section(2).modal_power)
+
+    s0 = pwmma.calc_spars_of_wgchain(chain, freqs, cfg, show_progress=False)
+    s1 = pwmma.calc_spars_of_wgchain(chain, freqs, cfg, show_progress=False, cms=cms)
+    np.testing.assert_allclose(s1[0], s0[0])
