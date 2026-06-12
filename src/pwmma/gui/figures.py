@@ -9,6 +9,8 @@ _DIELECTRIC = "#e6c9a8"
 _OUTLINE = "#1d5a9e"        # structure outline (accent steel blue)
 _OUTLINE_MIRROR = "#8a93a3"  # mirrored half of a symmetric chain
 
+# Colors here (and the inline hexes in _theme) mirror the :root tokens
+# in assets/style.css — keep the two in sync when changing the palette.
 _COLORWAY = ["#1d5a9e", "#c0392b", "#27824f", "#b8860b", "#6d4fa3", "#16828c"]
 _GRID = "#eef0f4"
 _AXIS = "#c8ccd4"
@@ -84,7 +86,6 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
         xaxis=dict(visible=False),
         yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
         showlegend=False,
-        plot_bgcolor="white",
     )
     return _theme(fig, axes=False)
 
