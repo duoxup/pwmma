@@ -146,3 +146,16 @@ def test_tab_visibility_switches_views():
     assert spars["display"] == "none"
     assert energy_graph["display"] == "block"
     assert energy_controls["visibility"] == "visible"
+
+
+def test_assets_css_present_and_packaged():
+    from pathlib import Path
+
+    import pwmma.gui as gui
+    css = Path(gui.__file__).parent / "assets" / "style.css"
+    assert css.is_file()
+    text = css.read_text(encoding="utf-8")
+    # the design-system anchors the rest of the plan relies on
+    for needle in [":root", ".titlebar", ".toolbar", ".statusbar", ".chain-row",
+                   ".led-sweep", ".eda-tab", "--accent"]:
+        assert needle in text, f"style.css missing {needle}"

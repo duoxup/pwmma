@@ -1,0 +1,258 @@
+/* pwmma GUI — desktop-EDA skin. Dash serves this automatically from assets/. */
+
+:root {
+  --win-bg: #e8eaed;
+  --panel-bg: #f7f8fa;
+  --border-strong: #c3c7ce;
+  --border-med: #c8ccd4;
+  --border-light: #d4d8df;
+  --text: #1a1d21;
+  --text-2: #41506b;
+  --text-disabled: #aab0bb;
+  --accent: #1d5a9e;
+  --accent-2: #2e74c0;
+  --accent-dark: #16487f;
+  --error: #c0392b;
+  --font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-num: Consolas, "Cascadia Mono", ui-monospace, Menlo, monospace;
+}
+
+html, body { margin: 0; padding: 0; background: var(--win-bg); }
+
+#app-root {
+  font-family: var(--font-ui);
+  color: var(--text);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---------- title bar ---------- */
+.titlebar {
+  flex: none;
+  background: linear-gradient(#fdfdfe, #f0f1f4);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 6px 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.titlebar .logo { width: 11px; height: 11px; background: var(--accent); }
+.titlebar .title { font-weight: 600; font-size: 13px; }
+.titlebar .subtitle { color: var(--text-2); font-size: 11px; }
+
+/* ---------- toolbar ---------- */
+.toolbar {
+  flex: none;
+  background: linear-gradient(#fafbfc, #eef0f3);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 5px 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.toolbar-sep { width: 1px; height: 20px; background: var(--border-med); margin: 0 4px; }
+
+/* ---------- body ---------- */
+.app-body { display: flex; flex: 1; min-height: 0; background: var(--panel-bg); }
+.left-panel {
+  flex: 0 0 35%; min-width: 480px;
+  padding: 10px; border-right: 1px solid var(--border-light);
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.right-panel {
+  flex: 1; min-width: 0;
+  padding: 10px 12px;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+
+/* ---------- group boxes ---------- */
+fieldset.group {
+  border: 1px solid var(--border-med); border-radius: 3px;
+  padding: 8px 10px; margin: 0; min-width: 0;
+}
+fieldset.group > legend {
+  font-size: 11px; color: var(--text-2); font-weight: 600; padding: 0 5px;
+}
+
+/* ---------- buttons ---------- */
+button {
+  font-family: var(--font-ui); font-size: 12px; color: var(--text);
+  background: linear-gradient(#ffffff, #eceef2);
+  border: 1px solid #aab0bb; border-radius: 3px;
+  padding: 4px 12px; cursor: pointer;
+}
+button:hover { background: linear-gradient(#ffffff, #f3f5f8); border-color: #8a93a3; }
+button:active { background: linear-gradient(#e4e7ec, #eef0f3); }
+button:disabled { color: var(--text-disabled); background: #f0f1f4; cursor: default; }
+
+button.btn-primary {
+  background: linear-gradient(#2e74c0, #1d5a9e);
+  border-color: var(--accent-dark); color: #fff; font-weight: 600;
+  padding: 4px 18px;
+}
+button.btn-primary:hover { background: linear-gradient(#3d83cf, #2363a9); }
+button.btn-primary:active { background: linear-gradient(#1d5a9e, #2e74c0); }
+button.btn-primary:disabled {
+  background: linear-gradient(#9db9d8, #8aa9c9);
+  border-color: #7f9cba; color: #e8eef5;
+}
+button.btn-small { font-size: 11px; padding: 3px 10px; }
+
+/* ---------- inputs ---------- */
+input:not([type="checkbox"]):not([type="radio"]) {
+  font-family: var(--font-num); font-size: 12px; color: var(--text);
+  background: #fff; border: 1px solid #aab0bb; border-radius: 2px;
+  padding: 3px 6px;
+}
+input:focus { outline: 1px solid var(--accent-2); outline-offset: -1px; }
+input:disabled { background: #f0f1f4; color: var(--text-disabled); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+
+.num-input { width: 64px; }
+.grow-input { flex: 1; }
+.lbl { font-size: 11px; color: var(--text-2); }
+.hint { font-size: 11px; color: #7a8496; margin-top: 4px; }
+.error-text { white-space: pre-wrap; color: var(--error); font-size: 12px; }
+
+.row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 2px; }
+.range-dash { padding-bottom: 5px; }
+
+/* checklists / radio items render label > input + text */
+.inline-check label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text);
+}
+
+/* ---------- waveguide chain (table look) ---------- */
+.chain-scroll {
+  height: 200px; overflow-y: auto; overflow-x: hidden;
+  border: 1px solid var(--border-light); background: #fff;
+}
+.chain-head {
+  display: flex; position: sticky; top: 0; z-index: 1;
+  background: #eef0f4; border-bottom: 1px solid var(--border-light);
+}
+.chain-head > div {
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+  padding: 3px 6px; min-width: 0;
+  border-right: 1px solid var(--border-light);
+}
+.chain-row { display: flex; }
+.chain-row > input, .chain-row > div > input {
+  min-width: 0;
+  border: none; border-radius: 0;
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+.chain-row .chain-del {
+  flex: 0 0 26px;
+  border: none; border-radius: 0;
+  border-bottom: 1px solid var(--border-light);
+  background: #fff; color: var(--error); padding: 0;
+}
+.chain-row .chain-del:hover { background: #fbeeec; }
+
+/* kind dropdown as a table cell — react-select v1 (.Select) and v2+ (hashed
+   class endings) selectors are both included; the inert one does nothing */
+.chain-kind .Select-control,
+.chain-kind [class$="-control"] {
+  border: none; border-radius: 0;
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  min-height: 26px; height: 26px;
+}
+.chain-kind .Select-value-label { font-size: 12px; }
+
+/* ---------- dropdowns (general) ---------- */
+.dd-small { width: 110px; font-size: 12px; }
+.dd-small .Select-control,
+.dd-small [class$="-control"] {
+  border: 1px solid #aab0bb; border-radius: 2px; min-height: 26px; height: 26px;
+}
+.Select-menu-outer, [class$="-menu"] { font-size: 12px; }
+
+/* ---------- slider (rc-slider) ---------- */
+.slider-box { width: 140px; padding-bottom: 2px; }
+.rc-slider-rail { background: var(--border-light); height: 3px; }
+.rc-slider-track { background: var(--accent-2); height: 3px; }
+.rc-slider-handle {
+  border: 1px solid var(--accent-dark);
+  background: linear-gradient(#fff, #dce4ee);
+  border-radius: 2px; width: 10px; height: 14px; margin-top: -6px;
+}
+
+/* ---------- tabs ---------- */
+.eda-tabs { flex: none; display: flex; }
+.eda-tab {
+  background: #e4e6ea !important;
+  border: 1px solid var(--border-med) !important;
+  border-bottom: none !important;
+  border-radius: 3px 3px 0 0 !important;
+  color: #5a6678 !important;
+  font-size: 12px !important;
+  padding: 5px 16px !important;
+  width: auto !important; flex: none !important;
+}
+.eda-tab--selected {
+  background: #fff !important;
+  color: var(--text) !important;
+  font-weight: 600 !important;
+}
+
+/* ---------- plot frame ---------- */
+.plot-frame {
+  border: 1px solid var(--border-med); background: #fff;
+  flex: 1; min-height: 0; padding: 8px;
+  display: flex; flex-direction: column;
+}
+.energy-controls-row {
+  display: flex; gap: 14px; align-items: center;
+  padding: 2px 4px 6px;
+}
+
+/* ---------- status bar ---------- */
+.statusbar {
+  flex: none;
+  background: #f0f1f4; border-top: 1px solid var(--border-strong);
+  display: flex; align-items: stretch;
+  font-size: 11px; color: var(--text-2);
+}
+.statusbar .cell {
+  padding: 4px 12px; border-right: 1px solid var(--border-light);
+  display: flex; align-items: center; gap: 8px;
+}
+.statusbar .cell.grow { flex: 1; border-right: none; justify-content: flex-end; }
+.statusbar .num { font-family: var(--font-num); }
+
+/* LED */
+.led { width: 9px; height: 9px; display: inline-block; border: 1px solid #8a93a3; flex: none; }
+.led-idle { background: var(--border-med); }
+.led-cm { background: #e0b13e; }
+.led-sweep { background: #3fae5e; animation: led-pulse 1s ease-in-out infinite; }
+.led-done { background: #27824f; }
+.led-error { background: var(--error); }
+@keyframes led-pulse { 50% { opacity: 0.35; } }
+
+/* progress */
+progress.eda-progress {
+  width: 180px; height: 10px;
+  -webkit-appearance: none; appearance: none;
+  border: 1px solid #aab0bb; border-radius: 2px; background: #fff;
+}
+progress.eda-progress::-webkit-progress-bar { background: #fff; }
+progress.eda-progress::-webkit-progress-value {
+  background: repeating-linear-gradient(45deg, #2e74c0, #2e74c0 6px, #3d83cf 6px, #3d83cf 12px);
+}
+progress.eda-progress::-moz-progress-bar {
+  background: repeating-linear-gradient(45deg, #2e74c0, #2e74c0 6px, #3d83cf 6px, #3d83cf 12px);
+}
+
+/* ---------- scrollbars ---------- */
+.chain-scroll::-webkit-scrollbar, .left-panel::-webkit-scrollbar,
+.right-panel::-webkit-scrollbar { width: 8px; }
+.chain-scroll::-webkit-scrollbar-thumb, .left-panel::-webkit-scrollbar-thumb,
+.right-panel::-webkit-scrollbar-thumb {
+  background: var(--border-strong); border: 2px solid var(--panel-bg);
+}
+.chain-scroll::-webkit-scrollbar-track { background: transparent; }
