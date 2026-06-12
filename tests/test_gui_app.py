@@ -182,6 +182,63 @@ def test_figures_use_shared_eda_theme():
     assert fig2.layout.xaxis.gridcolor == "#eef0f4"
 
 
+def _synthetic_section():
+    """A 5-point, 2-mode section: mode 0 always propagating, mode 1 cut off
+    below the third frequency point (negative net contribution while cut off)."""
+    import numpy as np
+
+    from pwmma.analysis import SectionEnergyCoupling
+
+    freqs = np.linspace(28e9, 34e9, 5)
+    modal_power = np.array([
+        [0.9, -0.06],
+        [0.9, -0.05],
+        [0.9, 0.30],
+        [0.9, 0.32],
+        [0.9, 0.35],
+    ])
+    prop = np.array([
+        [True, False],
+        [True, False],
+        [True, True],
+        [True, True],
+        [True, True],
+    ])
+    z = np.zeros((5, 2), dtype=complex)
+    zf = np.zeros(5)
+    return SectionEnergyCoupling(
+        section_index=1, freqs=freqs, mode_ids=np.arange(2),
+        modal_power=modal_power, propagating_mask=prop, evanescent_mask=~prop,
+        forward_left=z, backward_left=z, forward_right=z, backward_right=z,
+        reflection_power=zf, total_reflected_power=zf, transmission_power=zf,
+        power_balance=np.ones(5),
+    )
+
+
+def test_energy_line_shows_cutoff_segments_dotted():
+    import numpy as np
+
+    from pwmma.gui import figures
+
+    fig = figures.energy_line_figure(_synthetic_section(), mode_threshold=0.04, dB=False)
+    by_name = {t.name: t for t in fig.data}
+
+    # cutoff (evanescent) segment: dotted twin in the same color as the solid trace
+    solid, dotted = by_name["1"], by_name["1 (evan.)"]
+    assert dotted.line.dash == "dot"
+    assert dotted.line.color == solid.line.color
+    solid_y = np.asarray(solid.y, dtype=float)
+    dotted_y = np.asarray(dotted.y, dtype=float)
+    assert np.isnan(solid_y[:2]).all() and np.isfinite(solid_y[2:]).all()
+    assert np.isfinite(dotted_y[:2]).all() and np.isnan(dotted_y[2:]).all()
+
+    # mode 0 never cuts off: no dotted twin
+    assert "0 (evan.)" not in by_name
+
+    # total evanescent contribution gets its own summary trace
+    assert "Σ evan." in by_name
+
+
 def test_sweep_progress_reports_current_frequency():
     from pwmma.gui.callbacks import sweep_progress
 

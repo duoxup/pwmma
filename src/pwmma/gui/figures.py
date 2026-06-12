@@ -111,16 +111,37 @@ def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
 
 
 def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True) -> go.Figure:
-    """Per-mode propagating power for the dominant modes, plus totals."""
+    """Per-mode power for the dominant modes, plus totals.
+
+    Each mode draws its propagating band solid and its cutoff (evanescent) band
+    dotted in the same color, so the contribution below cutoff stays visible.
+    Note: cutoff contributions can be negative, which a log axis (dB on) cannot
+    render — switch dB off to see them.
+    """
     freqs_ghz = section.freqs * 1e-9
     fig = go.Figure()
     dominant = section.dominant_mode_ids(threshold=mode_threshold)
     labels = section.get_mode_labels(mode_ids=dominant)
-    for mode_id, label in zip(dominant, labels):
-        y = np.where(section.propagating_mask[:, mode_id], section.modal_power[:, mode_id], np.nan)
-        fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines", name=label))
+    for i, (mode_id, label) in enumerate(zip(dominant, labels)):
+        color = _COLORWAY[i % len(_COLORWAY)]
+        prop_mask = section.propagating_mask[:, mode_id]
+        evan_mask = section.evanescent_mask[:, mode_id]
+        if prop_mask.any():
+            y = np.where(prop_mask, section.modal_power[:, mode_id], np.nan)
+            fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines", name=label,
+                                     legendgroup=label, line=dict(color=color)))
+        if evan_mask.any():
+            y = np.where(evan_mask, section.modal_power[:, mode_id], np.nan)
+            fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines",
+                                     name=f"{label} (evan.)", legendgroup=label,
+                                     showlegend=not prop_mask.any(),
+                                     line=dict(color=color, dash="dot")))
     fig.add_trace(go.Scatter(x=freqs_ghz, y=section.total_propagating_power,
                              mode="lines", name="Σ prop.", line=dict(dash="dash", color="#1a1d21")))
+    if section.evanescent_mask.any():
+        fig.add_trace(go.Scatter(x=freqs_ghz, y=section.total_evanescent_power,
+                                 mode="lines", name="Σ evan.",
+                                 line=dict(dash="dot", color="#1a1d21")))
     fig.update_layout(
         height=528, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Net modal power",
