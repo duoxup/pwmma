@@ -22,7 +22,7 @@ def create_app() -> Dash:
     # Same diskcache as the background manager: a cross-process store so results
     # written by the background-callback worker are readable in the main process.
     app._pwmma_cache = cache
-    app.layout = build_layout()
+    app.layout = build_layout  # callable: re-read on each page load (saved defaults apply)
     cb.register_callbacks(app)
     cb.register_run_callback(app)
     cb.register_plot_callbacks(app)

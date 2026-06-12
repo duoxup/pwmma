@@ -120,6 +120,22 @@ def test_result_payload_survives_diskcache_roundtrip(tmp_path):
                                     threshold=0.04, db=True), go.Figure)
 
 
+def test_defaults_save_load_roundtrip(tmp_path, monkeypatch):
+    from pwmma.gui import defaults
+    monkeypatch.setattr(defaults, "_PATH", str(tmp_path / "d.json"))
+
+    # built-in defaults when no file exists
+    d0 = defaults.load_defaults()
+    assert "rows" in d0 and d0["precision"] == "single"
+
+    # saved values override the built-ins, missing keys fall back to built-in
+    defaults.save_defaults({"f_n": 123, "precision": "double"})
+    d1 = defaults.load_defaults()
+    assert d1["f_n"] == 123
+    assert d1["precision"] == "double"
+    assert "rows" in d1
+
+
 def test_tab_visibility_switches_views():
     from pwmma.gui.callbacks import tab_visibility
     spars, energy_graph, energy_controls = tab_visibility("spars")

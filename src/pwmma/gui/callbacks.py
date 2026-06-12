@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
-from . import adapter, figures
+from . import adapter, defaults, figures
 
 # Column spec shared with layout's header so the rows line up like a table.
 # (label, pixel width). 'a/r' holds rectangular width a or circular radius r;
@@ -88,6 +88,27 @@ def register_callbacks(app):
             return rows, render_chain_rows(rows)
         # a plain value edit: update data only, keep the inputs (no rebuild = no focus loss)
         return rows, no_update
+
+    @app.callback(
+        Output("save-status", "children"),
+        Input("save-default", "n_clicks"),
+        State("chain-store", "data"), State("sym", "value"),
+        State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
+        State("cm-nproc", "value"), State("sm-nproc", "value"),
+        State("use-gpu", "value"), State("precision", "value"),
+        State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
+        prevent_initial_call=True,
+    )
+    def _save_default(n, rows, sym, f_start, f_stop, f_n, cm_nproc, sm_nproc,
+                      use_gpu, precision, cache_enable, cache_dir):
+        defaults.save_defaults({
+            "rows": rows, "sym": list(sym or []),
+            "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
+            "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
+            "use_gpu": list(use_gpu or []), "precision": precision,
+            "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
+        })
+        return "✓ saved"
 
 
 def compute_payload(form: dict, progress_callback, status_callback=None):
