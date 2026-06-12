@@ -35,13 +35,16 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8050)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--debug", action="store_true",
-                        help="enable Dash dev tools + hot reload (auto-reload on code change)")
+                        help="hot reload on code change (server errors go to the terminal)")
+    parser.add_argument("--devtools", action="store_true",
+                        help="with --debug: show Dash's floating dev-tools UI in the browser")
     args = parser.parse_args()
     app = create_app()
     if not args.no_browser:
         url = f"http://localhost:{args.port}"
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    app.run(host=args.host, port=args.port, debug=args.debug,
+            dev_tools_ui=args.debug and args.devtools)
 
 
 if __name__ == "__main__":
