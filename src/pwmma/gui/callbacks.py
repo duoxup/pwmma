@@ -90,7 +90,7 @@ def register_callbacks(app):
         return rows, no_update
 
     @app.callback(
-        Output("save-status", "children"),
+        Output("save-tick", "data"),
         Input("save-default", "n_clicks"),
         State("chain-store", "data"), State("sym", "value"),
         State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
@@ -108,7 +108,26 @@ def register_callbacks(app):
             "use_gpu": list(use_gpu or []), "precision": precision,
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
         })
-        return "✓ saved"
+        return n
+
+    # transient button feedback: flash "saved ✓" then revert (browser-side timer)
+    app.clientside_callback(
+        """
+        function(n) {
+            if (n) {
+                var b = document.getElementById('save-default');
+                if (b) {
+                    b.textContent = 'saved ✓';
+                    setTimeout(function() { b.textContent = 'save as default'; }, 1400);
+                }
+            }
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("save-default", "children"),
+        Input("save-default", "n_clicks"),
+        prevent_initial_call=True,
+    )
 
 
 def compute_payload(form: dict, progress_callback, status_callback=None):

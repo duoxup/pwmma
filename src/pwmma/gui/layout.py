@@ -91,16 +91,13 @@ def build_layout() -> html.Div:
                                         "paddingBottom": "4px"}),
             ], style={"display": "flex", "gap": "10px", "alignItems": "flex-end"}),
             html.Div([
+                html.Button("save as default", id="save-default", n_clicks=0,
+                            style={"padding": "10px 4px", "fontSize": "1em", "cursor": "pointer",
+                                   "width": "155px", "textAlign": "center"}),
                 html.Button("▶ Run", id="run-button", n_clicks=0,
-                            style={"padding": "10px 24px", "fontSize": "1.1em",
-                                   "fontWeight": "bold", "cursor": "pointer"}),
-                html.Div([
-                    html.Button("save as default", id="save-default", n_clicks=0,
-                                style={"fontSize": "11px", "cursor": "pointer"}),
-                    html.Span(id="save-status", style={"fontSize": "11px", "color": "#2a7a2a"}),
-                ], style={"display": "flex", "gap": "6px", "alignItems": "center",
-                          "marginTop": "3px"}),
-            ], style={"display": "flex", "flexDirection": "column", "alignItems": "flex-end"}),
+                            style={"padding": "10px 4px", "fontSize": "1em", "fontWeight": "bold",
+                                   "cursor": "pointer", "width": "155px", "textAlign": "center"}),
+            ], style={"display": "flex", "gap": "8px", "alignItems": "flex-end"}),
         ], style={"display": "flex", "gap": "16px", "alignItems": "flex-end",
                   "justifyContent": "space-between", "flexWrap": "wrap"}),
         html.Hr(style=_HR),
@@ -132,5 +129,6 @@ def build_layout() -> html.Div:
         html.H3("pwmma — Mode-Matching Analyzer"),
         dcc.Store(id="chain-store", data=d["rows"]),
         dcc.Store(id="result-store"),  # holds a cache token + meta, not the heavy arrays
+        dcc.Store(id="save-tick"),  # server output for the "save as default" button
         html.Div([left, right], style={"display": "flex", "gap": "16px"}),
     ], style={"fontFamily": "sans-serif", "padding": "12px"})
