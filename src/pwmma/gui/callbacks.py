@@ -102,7 +102,8 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         chain = adapter.parse_chain(form["rows"], form["sym"])
         freqs = adapter.parse_freqs(form["f_start"], form["f_stop"], form["f_n"])
         cfg = adapter.parse_config(
-            {"nproc": form["cm_nproc"]},
+            {"nproc": form["cm_nproc"], "cache_dir": form.get("cm_cache_dir"),
+             "cache_enabled": form.get("cm_cache_enabled")},
             {"nproc": form["sm_nproc"], "use_gpu": form["use_gpu"], "precision": form["precision"]},
         )
     except adapter.GuiInputError as exc:
@@ -138,7 +139,8 @@ def register_run_callback(app):
         state=[State("chain-store", "data"), State("sym", "value"),
                State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
                State("cm-nproc", "value"), State("sm-nproc", "value"),
-               State("use-gpu", "value"), State("precision", "value")],
+               State("use-gpu", "value"), State("precision", "value"),
+               State("cm-cache-enable", "value"), State("cm-cache-dir", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False)],
         progress=[Output("run-status", "children"),
@@ -146,10 +148,11 @@ def register_run_callback(app):
         prevent_initial_call=True,
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
-             cm_nproc, sm_nproc, use_gpu, precision):
+             cm_nproc, sm_nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir):
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
-                "use_gpu": bool(use_gpu), "precision": precision}
+                "use_gpu": bool(use_gpu), "precision": precision,
+                "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir}
         bar_max = str(2 * int(f_n)) if f_n else "1"
 
         def status(phase):

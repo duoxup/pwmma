@@ -71,14 +71,12 @@ def build_layout() -> html.Div:
                           value=["gpu"], style={"paddingBottom": "4px"}),
         ], style=_ROW),
         html.Div([
-            html.Span("Coupling-matrix cache", style={"fontSize": "11px", "color": "#888"}),
             dcc.Checklist(id="cm-cache-enable",
-                          options=[{"label": " enable disk cache (coming soon)", "value": "on"}],
+                          options=[{"label": " cache coupling matrices on disk", "value": "on"}],
                           value=[], style={"display": "inline-block"}),
-            dcc.Input(id="cm-cache-dir", type="text", placeholder="cache directory",
-                      disabled=True, style={"width": "180px"}),
-        ], style={"display": "flex", "gap": "8px", "alignItems": "center",
-                  "marginTop": "4px", "opacity": "0.6"}),
+            dcc.Input(id="cm-cache-dir", type="text", value=".pwmma_cm_cache",
+                      placeholder="cache directory", style={"width": "200px"}),
+        ], style={"display": "flex", "gap": "8px", "alignItems": "center", "marginTop": "4px"}),
         html.Hr(style=_HR),
 
         html.Label("Frequency sweep", style=_LABEL),

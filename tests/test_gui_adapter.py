@@ -93,3 +93,36 @@ def test_run_spars_returns_arrays():
     out = A.run_spars(chain, freqs, cfg)
     assert set(out) == {"s11", "s12", "s21", "s22", "freqs"}
     assert out["s11"].shape[0] == 3
+
+
+def test_parse_config_enables_disk_cache():
+    cfg = A.parse_config(
+        {"nproc": 4, "cache_dir": "/tmp/cm", "cache_enabled": True},
+        {"nproc": 4, "use_gpu": False, "precision": "single"},
+    )
+    assert cfg.cmconf.cm_cache_dir == "/tmp/cm"
+    assert cfg.cmconf.try_read_cm_from_cache is True
+    assert cfg.cmconf.save_cm_to_cache is True
+
+
+def test_parse_config_no_cache_by_default():
+    cfg = A.parse_config({"nproc": 4}, {"nproc": 4, "use_gpu": False, "precision": "single"})
+    assert cfg.cmconf.cm_cache_dir is None
+    assert cfg.cmconf.try_read_cm_from_cache is False
+
+
+def test_compute_cms_disk_cache_roundtrip(tmp_path):
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 64, "er": "1", "sigma": "5.8e7"},
+    ]
+    chain = A.parse_chain(rows, sym=False)
+    cdir = tmp_path / "cm"
+    cfg = A.parse_config(
+        {"nproc": 2, "cache_dir": str(cdir), "cache_enabled": True},
+        {"nproc": 2, "use_gpu": False, "precision": "single"},
+    )
+    cms1 = A.compute_cms(chain, cfg)        # computes and saves to disk
+    assert cdir.exists() and any(cdir.iterdir())
+    cms2 = A.compute_cms(chain, cfg)        # reads back from cache
+    np.testing.assert_allclose(np.asarray(cms1[0]), np.asarray(cms2[0]))

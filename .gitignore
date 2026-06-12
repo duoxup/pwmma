@@ -5,6 +5,7 @@ __pycache__/
 *.dll
 rec*.npy
 cir*.npy
+.pwmma_cm_cache/
 
 .dist/
 build/
