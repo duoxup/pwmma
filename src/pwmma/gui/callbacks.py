@@ -139,7 +139,7 @@ def register_run_callback(app):
                State("use-gpu", "value"), State("precision", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False)],
-        progress=[Output("cm-light", "children"), Output("run-status", "children"),
+        progress=[Output("run-status", "children"),
                   Output("run-progress", "value"), Output("run-progress", "max")],
         prevent_initial_call=True,
     )
@@ -152,19 +152,19 @@ def register_run_callback(app):
 
         def status(phase):
             if phase == "cm":
-                set_progress(("🟡 cm: computing", "Computing coupling matrices…", "0", bar_max))
+                set_progress(("🟡 computing coupling matrices…", "0", bar_max))
             else:  # "sweep"
-                set_progress(("🟢 cm: ready", "Sweeping frequencies…", "0", bar_max))
+                set_progress(("🟢 sweeping frequencies…", "0", bar_max))
 
         def progress(done, tot):
-            set_progress(("🟢 cm: ready", f"Sweeping frequencies {done}/{tot}",
-                          str(done), str(tot)))
+            set_progress((f"🟢 sweeping frequencies {done}/{tot}", str(done), str(tot)))
 
         payload, error = compute_payload(form, progress, status_callback=status)
         if error is not None:
             return None, error
         token = f"run-{n_clicks}"
         app._pwmma_cache.set(token, payload)
+        set_progress(("✅ done", bar_max, bar_max))
         return {"token": token, "section_indices": payload["section_indices"]}, ""
 
 
