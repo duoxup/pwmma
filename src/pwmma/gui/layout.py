@@ -39,7 +39,7 @@ def build_layout() -> html.Div:
     left = html.Div([
         html.Label("Structure preview", style=_LABEL),
         dcc.Graph(id="structure-preview", config={"displayModeBar": False},
-                  style={"height": "120px"}),
+                  style={"height": "140px"}),
         html.Hr(style=_HR),
 
         html.Label("Waveguide chain", style=_LABEL),
@@ -97,7 +97,8 @@ def build_layout() -> html.Div:
 
         html.Progress(id="run-progress", value="0", max="100", style={"width": "100%"}),
         html.Div(id="run-status", style={"fontSize": "12px", "color": "#555", "minHeight": "16px"}),
-    ], style={"flex": "0 0 42%", "display": "flex", "flexDirection": "column", "gap": "6px"})
+    ], style={"flex": "0 0 35%", "minWidth": "480px", "display": "flex",
+              "flexDirection": "column", "gap": "6px"})
 
     right = html.Div([
         dcc.Tabs(id="result-tab", value="energy", children=[
