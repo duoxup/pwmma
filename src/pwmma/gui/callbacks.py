@@ -160,7 +160,7 @@ def sweep_progress(done, total, f_start, f_stop, f_n):
         idx = (int(done) - 1) % n
         f = float(f_start) + idx * (float(f_stop) - float(f_start)) / max(n - 1, 1)
         text += f" — {f:.3f} GHz"
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, ZeroDivisionError):
         pass
     return text, str(done), str(total), "led led-sweep"
 

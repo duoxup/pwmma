@@ -198,3 +198,9 @@ def test_sweep_progress_tolerates_bad_inputs():
     text, value, vmax, led = sweep_progress(1, 2, None, None, None)
     assert text.startswith("sweeping 1/2")
     assert led == "led led-sweep"
+
+    # degenerate sweep sizes must not raise (modulo/slope guards)
+    text1, *_ = sweep_progress(1, 2, 28.0, 34.0, 1)
+    assert "28.000 GHz" in text1
+    text0, *_ = sweep_progress(1, 2, 28.0, 34.0, 0)
+    assert text0.startswith("sweeping 1/2")
