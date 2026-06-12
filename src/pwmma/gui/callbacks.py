@@ -219,7 +219,9 @@ def register_run_callback(app):
                State("use-gpu", "value"), State("precision", "value"),
                State("cm-cache-enable", "value"), State("cm-cache-dir", "value")],
         background=True,
-        running=[(Output("run-button", "disabled"), True, False)],
+        running=[(Output("run-button", "disabled"), True, False),
+                 (Output("stop-button", "disabled"), False, True)],
+        cancel=[Input("stop-button", "n_clicks")],
         progress=[Output("run-status", "children"),
                   Output("run-progress", "value"), Output("run-progress", "max"),
                   Output("run-led", "className")],
@@ -250,6 +252,18 @@ def register_run_callback(app):
         app._pwmma_cache.set(token, payload)
         set_progress(("done", bar_max, bar_max, "led led-done"))
         return {"token": token, "section_indices": payload["section_indices"]}, ""
+
+    # Stop kills the background job via `cancel` above; the job can no longer
+    # report, so this regular callback resets the status-bar cells instead.
+    @app.callback(
+        Output("run-status", "children", allow_duplicate=True),
+        Output("run-progress", "value", allow_duplicate=True),
+        Output("run-led", "className", allow_duplicate=True),
+        Input("stop-button", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def _stopped(n):
+        return "stopped", "0", "led led-idle"
 
 
 def render_spars(payload):

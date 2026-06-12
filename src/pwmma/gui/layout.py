@@ -29,6 +29,7 @@ def _titlebar() -> html.Div:
 def _toolbar(d: dict) -> html.Div:
     return html.Div([
         html.Button("▶ Run", id="run-button", n_clicks=0, className="btn-primary"),
+        html.Button("⏹ Stop", id="stop-button", n_clicks=0, disabled=True),
         html.Button("💾 Save as default", id="save-default", n_clicks=0),
         html.Div(className="toolbar-sep"),
         html.Span("precision", className="lbl"),

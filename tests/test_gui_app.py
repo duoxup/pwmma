@@ -26,9 +26,9 @@ def test_layout_has_core_component_ids():
             walk(children)
 
     walk(root)
-    for required in ["chain-store", "result-store", "run-button", "save-default",
-                     "structure-preview", "sparam-graph", "energy-graph", "status",
-                     "run-led", "run-status", "run-progress", "config-summary"]:
+    for required in ["chain-store", "result-store", "run-button", "stop-button",
+                     "save-default", "structure-preview", "sparam-graph", "energy-graph",
+                     "status", "run-led", "run-status", "run-progress", "config-summary"]:
         assert required in ids, f"missing component id {required}"
 
 
