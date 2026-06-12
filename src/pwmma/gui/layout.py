@@ -2,8 +2,8 @@
 """Dash component tree for the pwmma GUI. Built per page load so saved defaults apply.
 
 Desktop-EDA skeleton: title bar / toolbar / body (inputs left, results right) /
-status bar. All visual styling lives in assets/style.css; inline styles are
-used only for per-column flex values shared with callbacks.CHAIN_COLUMNS.
+status bar. All theming lives in assets/style.css; the few inline styles here
+are one-off height/spacing tweaks only.
 """
 from __future__ import annotations
 
