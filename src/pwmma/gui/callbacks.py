@@ -6,34 +6,37 @@ from dash import ALL, Input, Output, State, ctx, dcc, html
 
 from . import adapter, figures
 
-_FIELDS = {"rec": ["a", "b", "l", "N", "er", "sigma"], "cir": ["r", "l", "N", "er", "sigma"]}
+# Column spec shared with layout's header so the rows line up like a table.
+# (label, pixel width). 'a/r' holds rectangular width a or circular radius r;
+# 'b' is rectangular-only (shown disabled for circular guides).
+CHAIN_COLUMNS = [("Type", 72), ("a/r", 60), ("b", 60), ("l", 52),
+                 ("N", 52), ("εr", 52), ("σ", 68)]
+_TRAILING_FIELDS = [("l", 52), ("N", 52), ("er", 52), ("sigma", 68)]
 
 
 def render_chain_rows(rows: list[dict]) -> list:
     children = []
     for i, row in enumerate(rows):
         kind = str(row.get("kind", "rec")).lower()
-        fields = [
-            dcc.Dropdown(
-                id={"role": "wg-kind", "i": i},
-                options=["rec", "cir"],
-                value=kind,
-                clearable=False,
-                style={"width": "80px"},
-            ),
+        first = "a" if kind == "rec" else "r"
+        cells = [
+            dcc.Dropdown(id={"role": "wg-kind", "i": i}, options=["rec", "cir"],
+                         value=kind, clearable=False, style={"width": "72px"}),
+            dcc.Input(id={"role": "wg-field", "i": i, "f": first}, type="text",
+                      value=str(row.get(first, "")), style={"width": "60px"}),
         ]
-        for f in _FIELDS[kind]:
-            fields.append(
-                dcc.Input(
-                    id={"role": "wg-field", "i": i, "f": f},
-                    type="text",
-                    value=str(row.get(f, "")),
-                    placeholder=f,
-                    style={"width": "60px"},
-                )
-            )
-        fields.append(html.Button("✕", id={"role": "wg-del", "i": i}, n_clicks=0))
-        children.append(html.Div(fields, style={"display": "flex", "gap": "4px"}))
+        if kind == "rec":
+            cells.append(dcc.Input(id={"role": "wg-field", "i": i, "f": "b"}, type="text",
+                                   value=str(row.get("b", "")), style={"width": "60px"}))
+        else:
+            cells.append(dcc.Input(value="—", disabled=True, style={"width": "60px"}))
+        for f, w in _TRAILING_FIELDS:
+            cells.append(dcc.Input(id={"role": "wg-field", "i": i, "f": f}, type="text",
+                                   value=str(row.get(f, "")), style={"width": f"{w}px"}))
+        cells.append(html.Button("✕", id={"role": "wg-del", "i": i}, n_clicks=0,
+                                 style={"width": "28px"}))
+        children.append(html.Div(cells, style={"display": "flex", "gap": "4px",
+                                               "alignItems": "center", "marginBottom": "3px"}))
     return children
 
 
@@ -120,7 +123,8 @@ def register_run_callback(app):
                State("use-gpu", "value"), State("precision", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False)],
-        progress=[Output("run-progress", "value"), Output("run-progress", "max")],
+        progress=[Output("run-status", "children"),
+                  Output("run-progress", "value"), Output("run-progress", "max")],
         prevent_initial_call=True,
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
@@ -128,9 +132,11 @@ def register_run_callback(app):
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
                 "use_gpu": bool(use_gpu), "precision": precision}
+        total = str(int(f_n) if f_n else 1)
+        set_progress(("Preparing coupling matrices…", "0", total))
 
         def progress(done, tot):
-            set_progress((str(done), str(tot)))
+            set_progress((f"Sweeping frequencies {done}/{tot}", str(done), str(tot)))
 
         payload, error = compute_payload(form, progress)
         if error is not None:

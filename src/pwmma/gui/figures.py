@@ -27,12 +27,14 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
     fig = go.Figure()
     segments = _expand(list(rows), sym)
     x = 0.0
+    max_ap = 0.0
     for row, is_mirror in segments:
         try:
             length = max(float(row.get("l", 0) or 0), 1e-9)
             ap = _aperture_mm(row)
         except (TypeError, ValueError):
             continue
+        max_ap = max(max_ap, ap)
         is_dielectric = abs(complex(str(row.get("er", "1") or "1"))) > 1.0001
         fill = _DIELECTRIC if is_dielectric else _METAL
         fig.add_shape(
@@ -51,12 +53,16 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
         height=120,
         margin=dict(l=4, r=4, t=4, b=4),
         xaxis=dict(visible=False),
-        yaxis=dict(visible=False, scaleanchor="x"),
+        yaxis=dict(visible=False),
         showlegend=False,
         plot_bgcolor="white",
     )
-    if segments:
-        fig.update_xaxes(range=[-0.02 * x, 1.02 * x])
+    # Fit the whole structure inside the frame regardless of its proportions by
+    # pinning both axis ranges to the drawn extent (with a small margin).
+    if segments and x > 0:
+        half = (max_ap / 2) * 1.15 or 1.0
+        fig.update_xaxes(range=[-0.02 * x, 1.02 * x], autorange=False)
+        fig.update_yaxes(range=[-half, half], autorange=False)
     return fig
 
 
