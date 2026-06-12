@@ -39,12 +39,13 @@ def build_layout() -> html.Div:
     left = html.Div([
         html.Label("Structure preview", style=_LABEL),
         dcc.Graph(id="structure-preview", config={"displayModeBar": False},
-                  style={"height": "180px"}),
+                  style={"height": "216px"}),
         html.Hr(style=_HR),
 
         html.Label("Waveguide chain", style=_LABEL),
         _chain_header(),
-        html.Div(id="chain-rows"),
+        html.Div(id="chain-rows", style={"height": "200px", "overflowY": "auto",
+                                         "border": "1px solid #eee", "padding": "2px"}),
         html.Div([
             html.Button("+ add waveguide", id="add-wg", n_clicks=0),
             dcc.Checklist(id="sym", options=[{"label": " symmetric (sym)", "value": "sym"}],

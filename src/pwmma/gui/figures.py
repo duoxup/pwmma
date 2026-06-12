@@ -58,7 +58,7 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
             mode="markers", marker=dict(opacity=0), hoverinfo="skip", showlegend=False,
         ))
     fig.update_layout(
-        height=180,
+        height=216,
         margin=dict(l=4, r=4, t=4, b=4),
         xaxis=dict(visible=False),
         yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
@@ -79,7 +79,7 @@ def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
             db = 20.0 * np.log10(np.abs(mat[:, e, e]))
         fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines", name=name))
     fig.update_layout(
-        height=440,
+        height=528,
         margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)",
         yaxis_title="Magnitude (dB)",
@@ -100,7 +100,7 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
     fig.add_trace(go.Scatter(x=freqs_ghz, y=section.total_propagating_power,
                              mode="lines", name="Σ prop.", line=dict(dash="dash", color="black")))
     fig.update_layout(
-        height=440, margin=dict(l=50, r=10, t=30, b=40),
+        height=528, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Net modal power",
         legend=dict(orientation="h"),
     )
@@ -121,7 +121,7 @@ def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure
         colorbar=dict(title="Power"),
     ))
     fig.update_layout(
-        height=440, margin=dict(l=50, r=10, t=30, b=40),
+        height=528, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Mode index",
     )
     return fig
@@ -130,5 +130,5 @@ def energy_heatmap_figure(section, *, max_modes: int | None = None) -> go.Figure
 def empty_figure(message: str) -> go.Figure:
     fig = go.Figure()
     fig.add_annotation(text=message, showarrow=False, font=dict(size=16, color="#999"))
-    fig.update_layout(height=440, xaxis=dict(visible=False), yaxis=dict(visible=False))
+    fig.update_layout(height=528, xaxis=dict(visible=False), yaxis=dict(visible=False))
     return fig
