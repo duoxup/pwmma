@@ -21,9 +21,10 @@ from .config import Config
 from .coupling_matrix import get_coupling_matrix
 from .gpu import get_array_backend
 from .inputs import Chain
+from .utils import judge_cross_section_containment
 from .numerics.gsm import (
     apply_propagation_factors_to_smatrix,
-    calc_scattering_matrix,
+    calc_transition_scattering_matrix,
     cascade_generalized_scattering_matrice,
 )
 
@@ -604,6 +605,12 @@ def analyze_energy_coupling(
     else:
         cms = [cnp.asarray(c, dtype=dtype) for c in cms]
 
+    # A contraction (wg1 larger than wg2) needs orientation-aware assembly; this
+    # is orthogonal to the sym ``reverse_blocks`` port swap, which only mirrors
+    # already-correct base transitions onto the second half of a sym chain.
+    base_is_contraction = [judge_cross_section_containment(wgt) == 2
+                           for wgt in base_transitions]
+
     per_section = {
         idx: {
             "modal_power": [],
@@ -639,10 +646,11 @@ def analyze_energy_coupling(
             zarr1 = zarr_list[idx_t][idx_f]
             zarr2 = zarr_list[idx_t + 1][idx_f]
             base_single_s.append(
-                calc_scattering_matrix(
+                calc_transition_scattering_matrix(
                     cm,
                     zarr1,
                     zarr2,
+                    is_contraction=base_is_contraction[idx_t],
                     cnp=cnp,
                     dtype=dtype,
                     conjugate_output=True,

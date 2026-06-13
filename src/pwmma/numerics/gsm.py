@@ -175,6 +175,31 @@ def calc_scattering_matrix_sl_elim_s(Csl, zs, zl, *,
 # less number of modes
 calc_scattering_matrix = calc_scattering_matrix_sl_elim_s
 
+
+def calc_transition_scattering_matrix(cm, zarr1, zarr2, *, is_contraction,
+                                      cnp, dtype, conjugate_output=True):
+    """Single-transition S-matrix in chain order (port 1 = wg1, port 2 = wg2).
+
+    ``cm`` is the coupling matrix as returned by ``get_coupling_matrix``: its
+    rows index wg1 and its columns index wg2. ``calc_scattering_matrix`` is not
+    orientation independent — its derivation assumes the rows are the
+    small/aperture side (the C->0 limit gives S_ss -> +I but S_ll -> -I, so the
+    two sides carry different boundary conditions). For an expansion (wg1 the
+    smaller side) the chain orientation already satisfies that, so we call it
+    directly. For a contraction (wg1 the larger side) we solve in the
+    small->large orientation instead (``cm.T`` with the impedances swapped) and
+    relabel the four blocks back to chain order.
+    """
+    if is_contraction:
+        s_ss, s_sl, s_ls, s_ll = calc_scattering_matrix(
+            cm.T, zarr2, zarr1, cnp=cnp, dtype=dtype,
+            conjugate_output=conjugate_output)
+        return s_ll, s_ls, s_sl, s_ss
+    return calc_scattering_matrix(
+        cm, zarr1, zarr2, cnp=cnp, dtype=dtype,
+        conjugate_output=conjugate_output)
+
+
 def apply_propagation_factors_to_smatrix(
     S_ss, S_sl, S_ls, S_ll,
     p_s, p_l, *,

@@ -19,7 +19,8 @@ from .inputs import Chain
 from .config import Config
 from .gpu import get_array_backend
 from .coupling_matrix import get_coupling_matrix
-from .numerics.gsm import (calc_scattering_matrix,
+from .utils import judge_cross_section_containment
+from .numerics.gsm import (calc_transition_scattering_matrix,
                            apply_propagation_factors_to_smatrix,
                            cascade_generalized_scattering_matrice)
 
@@ -55,7 +56,12 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                for wgt in wgchain.transitions]
     else:
         cms = [cnp.asarray(c, dtype=dtype) for c in cms]
-        
+
+    # A contraction (wg1 larger than wg2) needs orientation-aware assembly; the
+    # flag only depends on geometry, so classify each transition once.
+    is_contraction = [judge_cross_section_containment(wgt) == 2
+                      for wgt in wgchain.transitions]
+
     st11 = []; st12 = []; st21 = []; st22 = []
     for idx_f, f in enumerate(tqdm(freqs, disable=not show_progress)):
         counter = 0
@@ -64,9 +70,10 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
             cm = cms[idx_wgt]
             zarr1 = zarr_list[idx_wgt][idx_f]
             zarr2 = zarr_list[idx_wgt+1][idx_f]
-            s11, s12, s21, s22 = calc_scattering_matrix(cm, zarr1, zarr2,
-                                                        cnp=cnp, dtype=dtype,
-                                                        conjugate_output=True)
+            s11, s12, s21, s22 = calc_transition_scattering_matrix(
+                cm, zarr1, zarr2,
+                is_contraction=is_contraction[idx_wgt],
+                cnp=cnp, dtype=dtype, conjugate_output=True)
             if counter == 0:
                 SA = (s11, s12, s21, s22)
             else:
