@@ -10,6 +10,7 @@ import logging
 
 import numpy as np
 from multiprocessing import Pool
+from threadpoolctl import threadpool_limits
 
 from .numerics.cm import calc_coupling_matrix
 from .inputs import Transition
@@ -66,7 +67,9 @@ def get_coupling_matrix(wgt: Transition,
             chunksize = 64 if wgt.wg1.cross_tag != wgt.wg2.cross_tag else 8192
         else:
             chunksize = config.chunksize
-        with Pool(processes=nproc) as pool:
+        # Cap BLAS to one thread while the pool is alive so the nproc forked
+        # workers inherit single-threaded linear algebra (total ~= nproc cores).
+        with threadpool_limits(limits=1), Pool(processes=nproc) as pool:
             cm = calc_coupling_matrix(wgt_s2l, pool=pool, chunksize=chunksize)
         logger.debug('Coupling matrix computed, shape=%s', cm.shape)
         if config.cm_cache_dir is not None and config.save_cm_to_cache:

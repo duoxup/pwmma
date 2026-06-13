@@ -12,6 +12,7 @@ from typing import Callable, Sequence, Tuple
 import numpy as np
 from multiprocessing import Pool
 from tqdm import tqdm
+from threadpoolctl import threadpool_limits
 
 import waveguides.heavy_computation as hc
 
@@ -43,7 +44,10 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
     precision = 'complex128' if sm_config.use_double_precision else 'complex64'
     logger.info('Backend: %s | Precision: %s | Frequencies: %d | Waveguides: %d',
                 backend_name, precision, len(freqs), wgchain.n_wgs)
-    with Pool(processes=sm_config.nproc) as pool:
+    # Cap BLAS to one thread while the pool is alive so the nproc forked workers
+    # inherit single-threaded linear algebra (total ~= nproc cores, not
+    # nproc x all-cores).
+    with threadpool_limits(limits=1), Pool(processes=sm_config.nproc) as pool:
         zarr_list = [cnp.asarray(hc.impedance_array(wg, freqs, \
                      pool=pool, chunksize=2048), dtype=dtype) \
                      for wg in wgchain.wgs]
@@ -63,42 +67,45 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                       for wgt in wgchain.transitions]
 
     st11 = []; st12 = []; st21 = []; st22 = []
-    for idx_f, f in enumerate(tqdm(freqs, disable=not show_progress)):
-        counter = 0
-        SA = None
-        for idx_wgt, wgt in enumerate(wgchain.transitions):
-            cm = cms[idx_wgt]
-            zarr1 = zarr_list[idx_wgt][idx_f]
-            zarr2 = zarr_list[idx_wgt+1][idx_f]
-            s11, s12, s21, s22 = calc_transition_scattering_matrix(
-                cm, zarr1, zarr2,
-                is_contraction=is_contraction[idx_wgt],
-                cnp=cnp, dtype=dtype, conjugate_output=True)
-            if counter == 0:
-                SA = (s11, s12, s21, s22)
+    # The cascade runs serially in this process; cap its BLAS to ~nproc cores so
+    # nproc=1 no longer saturates the machine (OpenBLAS otherwise uses them all).
+    with threadpool_limits(limits=sm_config.nproc):
+        for idx_f, f in enumerate(tqdm(freqs, disable=not show_progress)):
+            counter = 0
+            SA = None
+            for idx_wgt, wgt in enumerate(wgchain.transitions):
+                cm = cms[idx_wgt]
+                zarr1 = zarr_list[idx_wgt][idx_f]
+                zarr2 = zarr_list[idx_wgt+1][idx_f]
+                s11, s12, s21, s22 = calc_transition_scattering_matrix(
+                    cm, zarr1, zarr2,
+                    is_contraction=is_contraction[idx_wgt],
+                    cnp=cnp, dtype=dtype, conjugate_output=True)
+                if counter == 0:
+                    SA = (s11, s12, s21, s22)
+                else:
+                    p_int = ps_list[idx_wgt][idx_f]
+                    SB = (s11, s12, s21, s22)
+                    SA = cascade_generalized_scattering_matrice(SA, SB, p_int=p_int, cnp=cnp)
+                counter += 1
+
+            if wgchain.sym:
+                p_int = ps_list[-1][idx_f]
+                p_l_r = ps_list[0][idx_f]
+                SA = cascade_generalized_scattering_matrice(SA, reversed(SA), p_int=p_int, cnp=cnp)
+                S = apply_propagation_factors_to_smatrix(SA[0], SA[1], SA[2], SA[3], p_l_r, p_l_r, cnp=cnp)
             else:
-                p_int = ps_list[idx_wgt][idx_f]
-                SB = (s11, s12, s21, s22)
-                SA = cascade_generalized_scattering_matrice(SA, SB, p_int=p_int, cnp=cnp)
-            counter += 1
+                p_l = ps_list[0][idx_f]
+                p_r = ps_list[-1][idx_f]
+                S = apply_propagation_factors_to_smatrix(SA[0], SA[1], SA[2], SA[3], p_l, p_r, cnp=cnp)
 
-        if wgchain.sym:
-            p_int = ps_list[-1][idx_f]
-            p_l_r = ps_list[0][idx_f]
-            SA = cascade_generalized_scattering_matrice(SA, reversed(SA), p_int=p_int, cnp=cnp)
-            S = apply_propagation_factors_to_smatrix(SA[0], SA[1], SA[2], SA[3], p_l_r, p_l_r, cnp=cnp)
-        else:
-            p_l = ps_list[0][idx_f]
-            p_r = ps_list[-1][idx_f]
-            S = apply_propagation_factors_to_smatrix(SA[0], SA[1], SA[2], SA[3], p_l, p_r, cnp=cnp)
+            st11.append(S[0])
+            st12.append(S[1])
+            st21.append(S[2])
+            st22.append(S[3])
 
-        st11.append(S[0])
-        st12.append(S[1])
-        st21.append(S[2])
-        st22.append(S[3])
-
-        if progress_callback is not None:
-            progress_callback(idx_f + 1, len(freqs))
+            if progress_callback is not None:
+                progress_callback(idx_f + 1, len(freqs))
 
     st11 = np.stack([x.get() for x in st11]) if cnp is not np else np.stack(st11)
     st12 = np.stack([x.get() for x in st12]) if cnp is not np else np.stack(st12)

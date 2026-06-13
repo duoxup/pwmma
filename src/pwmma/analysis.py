@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
 import numpy as np
+from threadpoolctl import threadpool_limits
 
 import waveguides.heavy_computation as hc
 from waveguides import WG
@@ -586,7 +587,9 @@ def analyze_energy_coupling(
         section_indices,
     )
 
-    with Pool(processes=sm_config.nproc) as pool:
+    # Cap BLAS to one thread while the pool is alive so the nproc forked workers
+    # inherit single-threaded linear algebra (total ~= nproc cores).
+    with threadpool_limits(limits=1), Pool(processes=sm_config.nproc) as pool:
         zarr_list = [
             cnp.asarray(hc.impedance_array(wg, freqs, pool=pool, chunksize=2048), dtype=dtype)
             for wg in lossless_wgs
@@ -640,104 +643,105 @@ def analyze_energy_coupling(
 
         iterator = tqdm(iterator, total=len(freqs))
 
-    for idx_f, _ in iterator:
-        base_single_s = []
-        for idx_t, cm in enumerate(cms):
-            zarr1 = zarr_list[idx_t][idx_f]
-            zarr2 = zarr_list[idx_t + 1][idx_f]
-            base_single_s.append(
-                calc_transition_scattering_matrix(
-                    cm,
-                    zarr1,
-                    zarr2,
-                    is_contraction=base_is_contraction[idx_t],
-                    cnp=cnp,
-                    dtype=dtype,
-                    conjugate_output=True,
+    with threadpool_limits(limits=sm_config.nproc):
+        for idx_f, _ in iterator:
+            base_single_s = []
+            for idx_t, cm in enumerate(cms):
+                zarr1 = zarr_list[idx_t][idx_f]
+                zarr2 = zarr_list[idx_t + 1][idx_f]
+                base_single_s.append(
+                    calc_transition_scattering_matrix(
+                        cm,
+                        zarr1,
+                        zarr2,
+                        is_contraction=base_is_contraction[idx_t],
+                        cnp=cnp,
+                        dtype=dtype,
+                        conjugate_output=True,
+                    )
                 )
-            )
 
-        single_s = []
-        for base_idx, reverse_blocks in transition_specs:
-            s_matrix = base_single_s[base_idx]
-            single_s.append(tuple(reversed(s_matrix)) if reverse_blocks else s_matrix)
+            single_s = []
+            for base_idx, reverse_blocks in transition_specs:
+                s_matrix = base_single_s[base_idx]
+                single_s.append(tuple(reversed(s_matrix)) if reverse_blocks else s_matrix)
 
-        prefix = [None] * len(single_s)
-        prefix[0] = single_s[0]
-        for idx_t in range(1, len(single_s)):
-            prefix[idx_t] = cascade_generalized_scattering_matrice(
-                prefix[idx_t - 1],
-                single_s[idx_t],
-                p_int=ps_list[idx_t][idx_f],
+            prefix = [None] * len(single_s)
+            prefix[0] = single_s[0]
+            for idx_t in range(1, len(single_s)):
+                prefix[idx_t] = cascade_generalized_scattering_matrice(
+                    prefix[idx_t - 1],
+                    single_s[idx_t],
+                    p_int=ps_list[idx_t][idx_f],
+                    cnp=cnp,
+                )
+
+            suffix = [None] * len(single_s)
+            suffix[-1] = single_s[-1]
+            for idx_t in range(len(single_s) - 2, -1, -1):
+                suffix[idx_t] = cascade_generalized_scattering_matrice(
+                    single_s[idx_t],
+                    suffix[idx_t + 1],
+                    p_int=ps_list[idx_t + 1][idx_f],
+                    cnp=cnp,
+                )
+
+            total_s = _calc_total_scattering(
+                prefix[-1],
+                ps_list[0][idx_f],
+                ps_list[-1][idx_f],
                 cnp=cnp,
             )
+            s11_full = total_s[0]
+            s21_full = total_s[2]
+            reflection_power = cnp.abs(s11_full[excitation_mode, excitation_mode]) ** 2
+            total_reflected_power = cnp.sum(cnp.abs(s11_full[:, excitation_mode]) ** 2)
+            transmission_power = cnp.abs(s21_full[excitation_mode, excitation_mode]) ** 2
 
-        suffix = [None] * len(single_s)
-        suffix[-1] = single_s[-1]
-        for idx_t in range(len(single_s) - 2, -1, -1):
-            suffix[idx_t] = cascade_generalized_scattering_matrice(
-                single_s[idx_t],
-                suffix[idx_t + 1],
-                p_int=ps_list[idx_t + 1][idx_f],
-                cnp=cnp,
-            )
+            for section_idx in section_indices:
+                left_s = prefix[section_idx - 1]
+                right_s = suffix[section_idx]
+                p_sec = ps_list[section_idx][idx_f]
+                z_sec = zarr_list[section_idx][idx_f]
+                prop_mask = cnp.asarray(section_prop_masks[section_idx][idx_f])
 
-        total_s = _calc_total_scattering(
-            prefix[-1],
-            ps_list[0][idx_f],
-            ps_list[-1][idx_f],
-            cnp=cnp,
-        )
-        s11_full = total_s[0]
-        s21_full = total_s[2]
-        reflection_power = cnp.abs(s11_full[excitation_mode, excitation_mode]) ** 2
-        total_reflected_power = cnp.sum(cnp.abs(s11_full[:, excitation_mode]) ** 2)
-        transmission_power = cnp.abs(s21_full[excitation_mode, excitation_mode]) ** 2
+                (
+                    forward_left,
+                    backward_left,
+                    forward_right,
+                    backward_right,
+                ) = _solve_section_response(
+                    left_s,
+                    right_s,
+                    p_sec,
+                    excitation_mode,
+                    cnp=cnp,
+                )
+                modal_power, prop_mask, evan_mask = _calc_modal_power(
+                    forward_left,
+                    backward_left,
+                    backward_right,
+                    z_sec,
+                    prop_mask,
+                    cnp=cnp,
+                )
+                power_balance = total_reflected_power + cnp.sum(modal_power)
 
-        for section_idx in section_indices:
-            left_s = prefix[section_idx - 1]
-            right_s = suffix[section_idx]
-            p_sec = ps_list[section_idx][idx_f]
-            z_sec = zarr_list[section_idx][idx_f]
-            prop_mask = cnp.asarray(section_prop_masks[section_idx][idx_f])
+                bucket = per_section[section_idx]
+                bucket["modal_power"].append(_to_numpy(modal_power, cnp))
+                bucket["propagating_mask"].append(_to_numpy(prop_mask, cnp))
+                bucket["evanescent_mask"].append(_to_numpy(evan_mask, cnp))
+                bucket["forward_left"].append(_to_numpy(forward_left, cnp))
+                bucket["backward_left"].append(_to_numpy(backward_left, cnp))
+                bucket["forward_right"].append(_to_numpy(forward_right, cnp))
+                bucket["backward_right"].append(_to_numpy(backward_right, cnp))
+                bucket["reflection_power"].append(_to_numpy(reflection_power, cnp).item())
+                bucket["total_reflected_power"].append(_to_numpy(total_reflected_power, cnp).item())
+                bucket["transmission_power"].append(_to_numpy(transmission_power, cnp).item())
+                bucket["power_balance"].append(_to_numpy(power_balance, cnp).item())
 
-            (
-                forward_left,
-                backward_left,
-                forward_right,
-                backward_right,
-            ) = _solve_section_response(
-                left_s,
-                right_s,
-                p_sec,
-                excitation_mode,
-                cnp=cnp,
-            )
-            modal_power, prop_mask, evan_mask = _calc_modal_power(
-                forward_left,
-                backward_left,
-                backward_right,
-                z_sec,
-                prop_mask,
-                cnp=cnp,
-            )
-            power_balance = total_reflected_power + cnp.sum(modal_power)
-
-            bucket = per_section[section_idx]
-            bucket["modal_power"].append(_to_numpy(modal_power, cnp))
-            bucket["propagating_mask"].append(_to_numpy(prop_mask, cnp))
-            bucket["evanescent_mask"].append(_to_numpy(evan_mask, cnp))
-            bucket["forward_left"].append(_to_numpy(forward_left, cnp))
-            bucket["backward_left"].append(_to_numpy(backward_left, cnp))
-            bucket["forward_right"].append(_to_numpy(forward_right, cnp))
-            bucket["backward_right"].append(_to_numpy(backward_right, cnp))
-            bucket["reflection_power"].append(_to_numpy(reflection_power, cnp).item())
-            bucket["total_reflected_power"].append(_to_numpy(total_reflected_power, cnp).item())
-            bucket["transmission_power"].append(_to_numpy(transmission_power, cnp).item())
-            bucket["power_balance"].append(_to_numpy(power_balance, cnp).item())
-
-        if progress_callback is not None:
-            progress_callback(idx_f + 1, len(freqs))
+            if progress_callback is not None:
+                progress_callback(idx_f + 1, len(freqs))
 
     result_sections = {}
     freqs_np = freqs_arr

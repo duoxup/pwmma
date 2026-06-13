@@ -14,6 +14,7 @@ dependencies = [
   "numpy",
   "scipy",
   "tqdm",
+  "threadpoolctl",
   # waveguides is an internal/private package and not available on PyPI.
   # Install it manually from its source repository before installing this package.
   "waveguides",
