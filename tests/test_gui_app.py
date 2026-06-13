@@ -406,3 +406,17 @@ def test_adapter_prune_cache_smoke(tmp_path):
 
     summary = adapter.prune_cache(str(tmp_path))  # empty dir -> no-op
     assert summary["removed"] == [] and summary["kept"] == 0
+
+
+def test_browser_opens_only_in_initial_process(monkeypatch):
+    # Under --debug, Werkzeug re-executes the entry point in a reload child
+    # (WERKZEUG_RUN_MAIN=true). The browser must open only in the initial
+    # process, or every hot reload spawns a new tab.
+    from pwmma.gui.app import _should_open_browser
+
+    monkeypatch.delenv("WERKZEUG_RUN_MAIN", raising=False)
+    assert _should_open_browser(no_browser=False) is True
+    assert _should_open_browser(no_browser=True) is False
+
+    monkeypatch.setenv("WERKZEUG_RUN_MAIN", "true")  # reloader child
+    assert _should_open_browser(no_browser=False) is False

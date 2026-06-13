@@ -29,6 +29,17 @@ def create_app() -> Dash:
     return app
 
 
+def _should_open_browser(no_browser: bool) -> bool:
+    """Whether this process should open a browser tab.
+
+    Under ``--debug`` Werkzeug's reloader re-executes the entry point in a child
+    process on every code change, setting ``WERKZEUG_RUN_MAIN=true`` there. Only
+    the initial/watcher process (where that var is unset) should open a tab, or
+    each hot reload would spawn a new one.
+    """
+    return not no_browser and not os.environ.get("WERKZEUG_RUN_MAIN")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pwmma-gui")
     parser.add_argument("--host", default="127.0.0.1")
@@ -40,7 +51,7 @@ def main() -> None:
                         help="with --debug: show Dash's floating dev-tools UI in the browser")
     args = parser.parse_args()
     app = create_app()
-    if not args.no_browser:
+    if _should_open_browser(args.no_browser):
         url = f"http://localhost:{args.port}"
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     app.run(host=args.host, port=args.port, debug=args.debug,
