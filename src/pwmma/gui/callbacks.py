@@ -136,6 +136,22 @@ def register_callbacks(app):
         sm = "—" if sm_nproc is None else sm_nproc
         return f"{device} · {precision or '—'} · {cm}/{sm} proc"
 
+    @app.callback(
+        Output("prune-status", "children"),
+        Input("prune-cache", "n_clicks"),
+        State("cm-cache-dir", "value"),
+        prevent_initial_call=True,
+    )
+    def _prune(n, cache_dir):
+        # Removes coupling-matrix files that a larger cached matrix subsumes.
+        # Best run when idle; a concurrent worker whose file vanishes recomputes.
+        if not cache_dir:
+            return "set a cache directory first"
+        try:
+            return format_prune_summary(adapter.prune_cache(cache_dir))
+        except OSError as exc:
+            return f"prune failed: {exc}"
+
     # transient button feedback: flash "saved ✓" then revert (browser-side timer)
     app.clientside_callback(
         """
@@ -197,6 +213,15 @@ def result_tab_for(mode):
     if mode == "energy":
         return "energy"
     return None
+
+
+def format_prune_summary(summary: dict) -> str:
+    """Human-readable status line for a prune_coupling_matrix_cache() summary."""
+    msg = (f"pruned {len(summary['removed'])} file(s), "
+           f"freed {summary['freed_bytes'] / 1e6:.1f} MB · kept {summary['kept']}")
+    if summary.get("temp_removed"):
+        msg += f" · cleaned {len(summary['temp_removed'])} temp(s)"
+    return msg
 
 
 def compute_payload(form: dict, progress_callback, status_callback=None):

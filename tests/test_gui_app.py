@@ -30,7 +30,7 @@ def test_layout_has_core_component_ids():
                      "save-default", "structure-preview", "sparam-graph", "energy-graph",
                      "status", "run-led", "run-status", "run-progress", "config-summary",
                      "mode-type-filter", "m-filter", "n-filter", "ef-lo", "ef-hi",
-                     "compute-select"]:
+                     "compute-select", "prune-cache", "prune-status"]:
         assert required in ids, f"missing component id {required}"
 
 
@@ -383,3 +383,26 @@ def test_render_placeholder_when_result_type_not_computed():
                                kind="line", threshold=0.04, db=True)
     assert "not computed" in spars_fig.layout.annotations[0].text.lower()
     assert "not computed" in energy_fig.layout.annotations[0].text.lower()
+
+
+def test_format_prune_summary_reports_counts():
+    from pwmma.gui.callbacks import format_prune_summary
+
+    msg = format_prune_summary(
+        {"removed": ["a", "b"], "temp_removed": ["t"], "kept": 3, "freed_bytes": 2_500_000})
+    assert msg.startswith("pruned 2 file")
+    assert "2.5 MB" in msg
+    assert "kept 3" in msg
+    assert "cleaned 1" in msg
+
+    empty = format_prune_summary(
+        {"removed": [], "temp_removed": [], "kept": 0, "freed_bytes": 0})
+    assert empty.startswith("pruned 0 file")
+    assert "cleaned" not in empty  # no temp note when nothing stray
+
+
+def test_adapter_prune_cache_smoke(tmp_path):
+    from pwmma.gui import adapter
+
+    summary = adapter.prune_cache(str(tmp_path))  # empty dir -> no-op
+    assert summary["removed"] == [] and summary["kept"] == 0

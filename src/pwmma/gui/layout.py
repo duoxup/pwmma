@@ -97,6 +97,11 @@ def _left_panel(d: dict) -> html.Div:
                           value=d.get("cm_cache_dir", ".pwmma_cm_cache"),
                           placeholder="cache directory", className="grow-input"),
             ], className="row", style={"marginTop": "6px"}),
+            html.Div([
+                html.Button("Prune cache", id="prune-cache", n_clicks=0,
+                            className="btn-small"),
+                html.Span(id="prune-status", className="hint"),
+            ], className="row", style={"marginTop": "6px"}),
         ], className="group"),
 
         html.Fieldset([

@@ -10,6 +10,7 @@ from .. import analyze_energy_coupling
 from ..config import CMConfig, Config, SMConfig
 from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
+from ..io.numpy import prune_coupling_matrix_cache
 from ..main import calc_spars_of_wgchain
 
 
@@ -115,3 +116,8 @@ def run_spars(chain, freqs, config,
         chain, freqs, config, show_progress=False, progress_callback=progress_callback, cms=cms,
     )
     return {"freqs": np.asarray(freqs), "s11": s11, "s12": s12, "s21": s21, "s22": s22}
+
+
+def prune_cache(cache_dir: str, *, dry_run: bool = False) -> dict:
+    """Remove redundant coupling-matrix cache files; returns a summary dict."""
+    return prune_coupling_matrix_cache(cache_dir, dry_run=dry_run)
