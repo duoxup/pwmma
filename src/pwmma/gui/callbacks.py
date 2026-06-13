@@ -110,15 +110,17 @@ def register_callbacks(app):
         State("cm-nproc", "value"), State("sm-nproc", "value"),
         State("use-gpu", "value"), State("precision", "value"),
         State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
+        State("compute-select", "value"),
         prevent_initial_call=True,
     )
     def _save_default(n, rows, sym, f_start, f_stop, f_n, cm_nproc, sm_nproc,
-                      use_gpu, precision, cache_enable, cache_dir):
+                      use_gpu, precision, cache_enable, cache_dir, compute):
         defaults.save_defaults({
             "rows": rows, "sym": list(sym or []),
             "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
             "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
             "use_gpu": list(use_gpu or []), "precision": precision,
+            "compute": compute,
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
         })
         return n
@@ -171,13 +173,41 @@ def sweep_progress(done, total, f_start, f_stop, f_n):
     return text, str(done), str(total), "led led-sweep"
 
 
+def compute_selection(mode):
+    """``(do_spars, do_energy)`` for a ``compute-select`` value.
+
+    ``None`` or any unknown value falls back to computing both, so older saved
+    defaults and callers that omit the field keep the original behaviour.
+    """
+    do_spars = mode in ("both", "spars")
+    do_energy = mode in ("both", "energy")
+    if not (do_spars or do_energy):
+        return True, True
+    return do_spars, do_energy
+
+
+def result_tab_for(mode):
+    """Tab to activate after a run, or ``None`` to leave the user's choice.
+
+    A single-result run jumps to the tab that actually has data; ``"both"``
+    keeps whatever tab the user is on.
+    """
+    if mode == "spars":
+        return "spars"
+    if mode == "energy":
+        return "energy"
+    return None
+
+
 def compute_payload(form: dict, progress_callback, status_callback=None):
     """Pure compute step used by the background callback. Returns (payload, error_str).
 
-    Coupling matrices are computed once and shared by both the energy-coupling
-    and S-parameter sweeps. ``status_callback(phase)`` (optional) is called with
+    ``form["compute"]`` selects which sweeps run ("both" / "spars" / "energy");
+    a missing value means both. Coupling matrices are computed once and shared by
+    whichever sweeps run. ``status_callback(phase)`` (optional) is called with
     ``"cm"`` before the coupling-matrix computation and ``"sweep"`` before the
-    frequency sweeps, so the UI can show the current phase.
+    frequency sweeps, so the UI can show the current phase. The skipped result
+    type is stored as ``None``.
     """
     try:
         chain = adapter.parse_chain(form["rows"], form["sym"])
@@ -189,27 +219,35 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         )
     except adapter.GuiInputError as exc:
         return None, str(exc)
+    compute = form.get("compute", "both")
+    do_spars, do_energy = compute_selection(compute)
     try:
         n_phys = len(chain.wgs) + (len(chain.wgs) - 1 if chain.sym else 0)
         sections = list(range(1, n_phys - 1)) or None
         n = len(freqs)
-        total = 2 * n  # energy sweep + S-parameter sweep share one progress bar
+        total = (int(do_spars) + int(do_energy)) * n  # sweeps share one progress bar
         if status_callback:
             status_callback("cm")
         cms = adapter.compute_cms(chain, cfg)
         if status_callback:
             status_callback("sweep")
-        result = adapter.run_energy(
-            chain, freqs, cfg, sections=sections, cms=cms,
-            progress_callback=lambda done, _t: progress_callback(done, total))
-        spars = adapter.run_spars(
-            chain, freqs, cfg, cms=cms,
-            progress_callback=lambda done, _t: progress_callback(n + done, total))
+        done = 0
+        result = None
+        spars = None
+        if do_energy:
+            result = adapter.run_energy(
+                chain, freqs, cfg, sections=sections, cms=cms,
+                progress_callback=lambda d, _t: progress_callback(d, total))
+            done = n
+        if do_spars:
+            spars = adapter.run_spars(
+                chain, freqs, cfg, cms=cms,
+                progress_callback=lambda d, _t: progress_callback(done + d, total))
     except (NotImplementedError, ValueError) as exc:
         return None, f"computation failed: {exc}"
     return {
-        "section_indices": list(result.section_indices),
-        "result": result, "spars": spars,
+        "section_indices": list(result.section_indices) if result is not None else [],
+        "result": result, "spars": spars, "compute": compute,
     }, None
 
 
@@ -221,7 +259,8 @@ def register_run_callback(app):
                State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
                State("cm-nproc", "value"), State("sm-nproc", "value"),
                State("use-gpu", "value"), State("precision", "value"),
-               State("cm-cache-enable", "value"), State("cm-cache-dir", "value")],
+               State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
+               State("compute-select", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False),
                  (Output("stop-button", "disabled"), False, True)],
@@ -232,12 +271,15 @@ def register_run_callback(app):
         prevent_initial_call=True,
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
-             cm_nproc, sm_nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir):
+             cm_nproc, sm_nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
+             compute):
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
                 "use_gpu": bool(use_gpu), "precision": precision,
-                "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir}
-        bar_max = str(2 * int(f_n)) if f_n else "1"
+                "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir,
+                "compute": compute}
+        n_sweeps = sum(compute_selection(compute))
+        bar_max = str(n_sweeps * int(f_n)) if f_n else "1"
 
         def status(phase):
             if phase == "cm":
@@ -255,7 +297,8 @@ def register_run_callback(app):
         token = f"run-{n_clicks}"
         app._pwmma_cache.set(token, payload)
         set_progress(("done", bar_max, bar_max, "led led-done"))
-        return {"token": token, "section_indices": payload["section_indices"]}, ""
+        return {"token": token, "section_indices": payload["section_indices"],
+                "compute": payload["compute"]}, ""
 
     # Stop kills the background job via `cancel` above; the job can no longer
     # report, so this regular callback resets the status-bar cells instead.
@@ -271,6 +314,8 @@ def register_run_callback(app):
 
 
 def render_spars(payload):
+    if payload.get("spars") is None:
+        return figures.empty_figure("S-parameters not computed for this run")
     return figures.sparam_figure(payload["spars"], excitation_mode=0)
 
 
@@ -328,6 +373,8 @@ def band_slice(section, f_lo, f_hi):
 
 def render_energy(payload, *, section, kind, threshold, db,
                   mode_type=None, m=None, n=None, f_lo=None, f_hi=None):
+    if payload.get("result") is None:
+        return figures.empty_figure("Mode analysis not computed for this run")
     sec = band_slice(payload["result"].get_section(int(section)), f_lo, f_hi)
     if sec is None:
         return figures.empty_figure("no sweep points in the selected band")
@@ -375,7 +422,18 @@ def register_plot_callbacks(app):
     @app.callback(Output("sparam-graph", "figure"), Input("result-store", "data"))
     def _spars(data):
         p = _payload(data and data.get("token"))
-        return figures.sparam_figure(p["spars"]) if p else figures.empty_figure("Run first")
+        return render_spars(p) if p else figures.empty_figure("Run first")
+
+    @app.callback(
+        Output("result-tab", "value", allow_duplicate=True),
+        Input("result-store", "data"),
+        prevent_initial_call=True,
+    )
+    def _switch_tab(data):
+        # Jump to the tab that has data after a single-result run; leave the
+        # user's choice for a "both" run.
+        tab = result_tab_for(data.get("compute")) if data else None
+        return tab if tab is not None else no_update
 
     @app.callback(
         Output("energy-graph", "figure"),
@@ -386,7 +444,9 @@ def register_plot_callbacks(app):
     )
     def _energy(data, section, kind, threshold, db, mode_type, m, n, f_lo, f_hi):
         p = _payload(data and data.get("token"))
-        if not p or section is None:
+        if not p:
+            return figures.empty_figure("Run first")
+        if p.get("result") is not None and section is None:
             return figures.empty_figure("Run first")
         return render_energy(p, section=section, kind=kind, threshold=threshold, db=bool(db),
                              mode_type=mode_type, m=m, n=n, f_lo=f_lo, f_hi=f_hi)

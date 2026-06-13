@@ -29,7 +29,8 @@ def test_layout_has_core_component_ids():
     for required in ["chain-store", "result-store", "run-button", "stop-button",
                      "save-default", "structure-preview", "sparam-graph", "energy-graph",
                      "status", "run-led", "run-status", "run-progress", "config-summary",
-                     "mode-type-filter", "m-filter", "n-filter", "ef-lo", "ef-hi"]:
+                     "mode-type-filter", "m-filter", "n-filter", "ef-lo", "ef-hi",
+                     "compute-select"]:
         assert required in ids, f"missing component id {required}"
 
 
@@ -312,3 +313,73 @@ def test_sweep_progress_tolerates_bad_inputs():
     assert "28.000 GHz" in text1
     text0, *_ = sweep_progress(1, 2, 28.0, 34.0, 0)
     assert text0.startswith("sweeping 1/2")
+
+
+def test_compute_selection_gates_which_sweeps_run():
+    from pwmma.gui.callbacks import compute_selection
+
+    assert compute_selection("both") == (True, True)
+    assert compute_selection("spars") == (True, False)
+    assert compute_selection("energy") == (False, True)
+    # missing / unknown values fall back to computing both (backward compatible)
+    assert compute_selection(None) == (True, True)
+    assert compute_selection("nonsense") == (True, True)
+
+
+def test_result_tab_for_follows_single_selection():
+    from pwmma.gui.callbacks import result_tab_for
+
+    assert result_tab_for("spars") == "spars"
+    assert result_tab_for("energy") == "energy"
+    # "both" (and unknown) leave the user's current tab untouched
+    assert result_tab_for("both") is None
+    assert result_tab_for(None) is None
+
+
+def _small_chain_form(compute):
+    rows = [
+        {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 12, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 4.2, "l": 1.5, "N": 20, "er": "1", "sigma": "5.8e7"},
+        {"kind": "cir", "r": 5.4, "l": 0.26, "N": 24, "er": "9.2", "sigma": "5.8e7"},
+    ]
+    return {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
+            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64",
+            "compute": compute}
+
+
+def test_compute_payload_spars_only_skips_energy():
+    from pwmma.gui.callbacks import compute_payload
+
+    progress = []
+    payload, error = compute_payload(_small_chain_form("spars"),
+                                     lambda d, t: progress.append((d, t)))
+    assert error is None
+    assert payload["spars"] is not None
+    assert payload["result"] is None
+    assert payload["section_indices"] == []
+    assert payload["compute"] == "spars"
+    assert progress[-1] == (3, 3)  # a single sweep, not 2 * n
+
+
+def test_compute_payload_energy_only_skips_spars():
+    from pwmma.gui.callbacks import compute_payload
+
+    progress = []
+    payload, error = compute_payload(_small_chain_form("energy"),
+                                     lambda d, t: progress.append((d, t)))
+    assert error is None
+    assert payload["spars"] is None
+    assert payload["result"] is not None
+    assert payload["section_indices"]  # non-empty
+    assert payload["compute"] == "energy"
+    assert progress[-1] == (3, 3)
+
+
+def test_render_placeholder_when_result_type_not_computed():
+    from pwmma.gui.callbacks import render_energy, render_spars
+
+    spars_fig = render_spars({"spars": None})
+    energy_fig = render_energy({"result": None}, section=None,
+                               kind="line", threshold=0.04, db=True)
+    assert "not computed" in spars_fig.layout.annotations[0].text.lower()
+    assert "not computed" in energy_fig.layout.annotations[0].text.lower()

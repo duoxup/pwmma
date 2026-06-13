@@ -38,6 +38,14 @@ def _toolbar(d: dict) -> html.Div:
                      className="dd-small"),
         dcc.Checklist(id="use-gpu", options=[{"label": " GPU", "value": "gpu"}],
                       value=d.get("use_gpu", ["gpu"]), className="inline-check"),
+        html.Div(className="toolbar-sep"),
+        html.Span("compute", className="lbl"),
+        dcc.Dropdown(id="compute-select",
+                     options=[{"label": "Both", "value": "both"},
+                              {"label": "S-parameters", "value": "spars"},
+                              {"label": "Mode analysis", "value": "energy"}],
+                     value=d.get("compute", "both"), clearable=False,
+                     className="dd-small"),
     ], className="toolbar")
 
 
