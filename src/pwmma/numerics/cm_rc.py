@@ -207,12 +207,18 @@ def phase(l, N, kc_qr, x1, y1):
 
 
 #%% New Functions
+# These transcribe Wei Zhao's thesis eqs. (3-146)/(3-147)/(3-148) for the
+# large-circle / small-rect step. The summand carries NO leading sign there; an
+# earlier stray leading '-' made the whole rec<->cir coupling matrix the
+# negative of the physical mode overlap (cm_rr/cm_cc were already correct),
+# which corrupted only the transmission phase of mixed rec<->cir junctions.
+# Regression guard: tests/test_cm_ground_truth.py. Do NOT reintroduce the '-'.
 
 def hh_c(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):
     x1 = -a / 2 if x1 is None else x1
     y1 = -b / 2 if y1 is None else y1
     l = np.arange(N, dtype=float)
-    inner = -c_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * imc_vec(m, kc_qr*c_l(l, N)*a) * imc_vec(n, kc_qr*s_l(l, N)*b)
+    inner = c_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * imc_vec(m, kc_qr*c_l(l, N)*a) * imc_vec(n, kc_qr*s_l(l, N)*b)
     return kc_mn**2 * norm_factor * (1j)**q / N * np.sum(inner)
 
 def hh_s(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):
@@ -220,7 +226,7 @@ def hh_s(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):
     y1 = -b / 2 if y1 is None else y1
     kc_mn = np.sqrt((m * np.pi / a)**2 + (n * np.pi / b)**2)
     l = np.arange(N, dtype=float)
-    inner = -s_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * imc_vec(m, kc_qr*c_l(l, N)*a) * imc_vec(n, kc_qr*s_l(l, N)*b)
+    inner = s_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * imc_vec(m, kc_qr*c_l(l, N)*a) * imc_vec(n, kc_qr*s_l(l, N)*b)
     return kc_mn**2 * norm_factor * (1j)**q / N * np.sum(inner)
 
 def eh_c(*args, **kwargs):  
@@ -233,7 +239,7 @@ def he_c(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):  
     x1 = -a / 2 if x1 is None else x1
     y1 = -b / 2 if y1 is None else y1
     l = np.arange(N, dtype=float)
-    inner = -c_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * \
+    inner = c_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * \
         (c_l(l, N) * n * np.pi / b * imc_vec(m, kc_qr*c_l(l, N)*a) * ims_vec(n, kc_qr*s_l(l, N)*b) -\
          s_l(l, N) * m * np.pi / a * ims_vec(m, kc_qr*c_l(l, N)*a) * imc_vec(n, kc_qr*s_l(l, N)*b))
     return kc_qr * norm_factor * (1j)**(q+1) / N *np.sum(inner)
@@ -242,7 +248,7 @@ def he_s(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):
     x1 = -a / 2 if x1 is None else x1
     y1 = -b / 2 if y1 is None else y1
     l = np.arange(N, dtype=float)
-    inner = -s_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * \
+    inner = s_l_m(l, q, N) * phase(l, N, kc_qr, x1, y1) * a * b * \
         (c_l(l, N) * n * np.pi / b * imc_vec(m, kc_qr*c_l(l, N)*a) * ims_vec(n, kc_qr*s_l(l, N)*b) -\
          s_l(l, N) * m * np.pi / a * ims_vec(m, kc_qr*c_l(l, N)*a) * imc_vec(n, kc_qr*s_l(l, N)*b))
     return kc_qr * norm_factor * (1j)**(q+1) / N *np.sum(inner)
@@ -251,14 +257,14 @@ def ee_c(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):  
     x1 = -a / 2 if x1 is None else x1
     y1 = -b / 2 if y1 is None else y1
     l = np.arange(N, dtype=float)
-    inner = -c_l_m(l, q, N) * phase(l,N, kc_qr, x1, y1) * a * b * ims_vec(m, kc_qr*c_l(l, N)*a) * ims_vec(n, kc_qr*s_l(l, N)*b)
+    inner = c_l_m(l, q, N) * phase(l,N, kc_qr, x1, y1) * a * b * ims_vec(m, kc_qr*c_l(l, N)*a) * ims_vec(n, kc_qr*s_l(l, N)*b)
     return kc_qr**2 * norm_factor * (1j)**q / N * np.sum(inner)
 
 def ee_s(a, b, R, m, n, q, r, N, kc_mn, kc_qr, norm_factor, x1=None, y1=None):
     x1 = -a / 2 if x1 is None else x1
     y1 = -b / 2 if y1 is None else y1
     l = np.arange(N, dtype=float)
-    inner = -s_l_m(l, q, N) * phase(l,N, kc_qr, x1, y1) * a * b * ims_vec(m, kc_qr*c_l(l, N)*a) * ims_vec(n, kc_qr*s_l(l, N)*b)
+    inner = s_l_m(l, q, N) * phase(l,N, kc_qr, x1, y1) * a * b * ims_vec(m, kc_qr*c_l(l, N)*a) * ims_vec(n, kc_qr*s_l(l, N)*b)
     return kc_qr**2 * norm_factor * (1j)**q / N * np.sum(inner)
 
 if __name__ == "__main__":
