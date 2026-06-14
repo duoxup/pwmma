@@ -223,6 +223,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   padding: 2px 4px 6px;
 }
 .dd-small.dd-xs { width: 86px; }
+.dd-modes { min-width: 96px; max-width: 200px; }
 
 /* ---------- status bar ---------- */
 .statusbar {

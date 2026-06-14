@@ -273,6 +273,11 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
     return {
         "section_indices": list(result.section_indices) if result is not None else [],
         "result": result, "spars": spars, "compute": compute,
+        # mode counts so the S-param panel can offer mode selectors without the
+        # heavy arrays: n_in = excitation (port-1) modes, n_out = max over the
+        # S11 (port-1) and S21 (port-2) response dimensions.
+        "n_in": int(spars["s11"].shape[2]) if spars is not None else 0,
+        "n_out": int(max(spars["s11"].shape[1], spars["s21"].shape[1])) if spars is not None else 0,
     }, None
 
 
@@ -323,7 +328,8 @@ def register_run_callback(app):
         app._pwmma_cache.set(token, payload)
         set_progress(("done", bar_max, bar_max, "led led-done"))
         return {"token": token, "section_indices": payload["section_indices"],
-                "compute": payload["compute"]}, ""
+                "compute": payload["compute"],
+                "n_in": payload["n_in"], "n_out": payload["n_out"]}, ""
 
     # Stop kills the background job via `cancel` above; the job can no longer
     # report, so this regular callback resets the status-bar cells instead.
@@ -338,10 +344,10 @@ def register_run_callback(app):
         return "stopped", "0", "led led-idle"
 
 
-def render_spars(payload):
+def render_spars(payload, out_modes=(0,), in_modes=(0,)):
     if payload.get("spars") is None:
         return figures.empty_figure("S-parameters not computed for this run")
-    return figures.sparam_figure(payload["spars"], excitation_mode=0)
+    return figures.sparam_figure(payload["spars"], out_modes=out_modes, in_modes=in_modes)
 
 
 # Matches both rectangular ("TE1,0") and circular ("TM0,1S") mode labels.
@@ -413,16 +419,17 @@ def render_energy(payload, *, section, kind, threshold, db,
 
 
 def tab_visibility(tab):
-    """Styles for (sparam-graph, energy-graph, energy-controls) given the active tab.
+    """Styles for (sparam-graph, energy-graph, energy-controls, spars-controls).
 
-    Graphs are display-toggled (the hidden one collapses). The energy controls
-    use visibility instead, so their vertical space is reserved in both tabs and
-    the graph below them keeps a stable position when switching tabs.
+    Each tab shows its own graph and its own controls row; the others collapse
+    (display:none). A *visible* controls row must be restored to ``display:flex``
+    (its CSS layout) — ``display:block`` would override the flex row and stack
+    the controls vertically.
     """
-    show, hide = {"display": "block"}, {"display": "none"}
+    block, flex, hide = {"display": "block"}, {"display": "flex"}, {"display": "none"}
     if tab == "spars":
-        return show, hide, {"visibility": "hidden"}
-    return hide, show, {"visibility": "visible"}
+        return block, hide, hide, flex
+    return hide, block, flex, hide
 
 
 def register_plot_callbacks(app):
@@ -431,7 +438,8 @@ def register_plot_callbacks(app):
 
     @app.callback(
         Output("sparam-graph", "style"), Output("energy-graph", "style"),
-        Output("energy-controls", "style"), Input("result-tab", "value"),
+        Output("energy-controls", "style"), Output("spars-controls", "style"),
+        Input("result-tab", "value"),
     )
     def _toggle_tab(tab):
         return tab_visibility(tab)
@@ -444,10 +452,22 @@ def register_plot_callbacks(app):
         idx = data["section_indices"]
         return [{"label": str(i), "value": i} for i in idx], (idx[len(idx) // 2] if idx else None)
 
-    @app.callback(Output("sparam-graph", "figure"), Input("result-store", "data"))
-    def _spars(data):
+    @app.callback(Output("spars-out-modes", "options"), Output("spars-in-modes", "options"),
+                  Input("result-store", "data"))
+    def _spars_mode_options(data):
+        # keep >= 1 option so the default [0] selection always stays valid
+        n_out = max((data or {}).get("n_out", 0), 1)
+        n_in = max((data or {}).get("n_in", 0), 1)
+        return ([{"label": str(i), "value": i} for i in range(n_out)],
+                [{"label": str(j), "value": j} for j in range(n_in)])
+
+    @app.callback(Output("sparam-graph", "figure"),
+                  Input("result-store", "data"),
+                  Input("spars-out-modes", "value"),
+                  Input("spars-in-modes", "value"))
+    def _spars(data, out_modes, in_modes):
         p = _payload(data and data.get("token"))
-        return render_spars(p) if p else figures.empty_figure("Run first")
+        return render_spars(p, out_modes, in_modes) if p else figures.empty_figure("Run first")
 
     @app.callback(
         Output("result-tab", "value", allow_duplicate=True),

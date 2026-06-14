@@ -40,10 +40,10 @@ def _fake_spars(n=3, modes=4):
 
 
 def test_sparam_figure_has_traces_in_db():
-    fig = F.sparam_figure(_fake_spars(), excitation_mode=0)
+    fig = F.sparam_figure(_fake_spars())  # default (0,0)
     assert isinstance(fig, go.Figure)
     names = {t.name for t in fig.data}
-    assert "S11" in names and "S21" in names
+    assert "S11[0,0]" in names and "S21[0,0]" in names
     assert "dB" in (fig.layout.yaxis.title.text or "")
 
 

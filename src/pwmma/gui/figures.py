@@ -90,16 +90,32 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
     return _theme(fig, axes=False)
 
 
-def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
-    """Plot |S11| and |S21| of the excitation mode (reflection/transmission) in dB."""
+def sparam_figure(spars: dict, *, out_modes=(0,), in_modes=(0,)) -> go.Figure:
+    """|S11| (reflection) and |S21| (transmission) in dB, one pair of curves for
+    every (output i, input j) in the Cartesian product of the selected modes.
+
+    ``out_modes`` index the response (matrix row), ``in_modes`` the excitation
+    (matrix column); default (0, 0) is the dominant-mode view. Indices out of
+    range for a block (S11 rows = port-1 modes, S21 rows = port-2 modes) are
+    skipped, so unequal port mode counts are handled gracefully.
+    """
     freqs_ghz = np.asarray(spars["freqs"]) * 1e-9
-    e = excitation_mode
+    s11 = np.asarray(spars["s11"])
+    s21 = np.asarray(spars["s21"])
+    out_modes = [int(i) for i in (out_modes or (0,))]
+    in_modes = [int(j) for j in (in_modes or (0,))]
+    n_in = s11.shape[2]
     fig = go.Figure()
-    for name, key in (("S11", "s11"), ("S21", "s21")):
-        mat = np.asarray(spars[key])
-        with np.errstate(divide="ignore"):
-            db = 20.0 * np.log10(np.abs(mat[:, e, e]))
-        fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines", name=name))
+    for j in in_modes:
+        if not 0 <= j < n_in:
+            continue
+        for i in out_modes:
+            for label, mat in (("S11", s11), ("S21", s21)):
+                if 0 <= i < mat.shape[1]:
+                    with np.errstate(divide="ignore"):
+                        db = 20.0 * np.log10(np.abs(mat[:, i, j]))
+                    fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines",
+                                             name=f"{label}[{i},{j}]"))
     fig.update_layout(
         autosize=True,
         margin=dict(l=50, r=10, t=30, b=40),

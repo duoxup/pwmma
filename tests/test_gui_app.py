@@ -30,7 +30,8 @@ def test_layout_has_core_component_ids():
                      "save-default", "structure-preview", "sparam-graph", "energy-graph",
                      "status", "run-led", "run-status", "run-progress", "config-summary",
                      "mode-type-filter", "m-filter", "n-filter", "ef-lo", "ef-hi",
-                     "compute-select", "prune-cache", "prune-status"]:
+                     "compute-select", "prune-cache", "prune-status",
+                     "spars-controls", "spars-out-modes", "spars-in-modes"]:
         assert required in ids, f"missing component id {required}"
 
 
@@ -143,14 +144,12 @@ def test_defaults_save_load_roundtrip(tmp_path, monkeypatch):
 
 def test_tab_visibility_switches_views():
     from pwmma.gui.callbacks import tab_visibility
-    spars, energy_graph, energy_controls = tab_visibility("spars")
-    assert spars["display"] == "block"
-    assert energy_graph["display"] == "none"
-    assert energy_controls["visibility"] == "hidden"
-    spars, energy_graph, energy_controls = tab_visibility("energy")
-    assert spars["display"] == "none"
-    assert energy_graph["display"] == "block"
-    assert energy_controls["visibility"] == "visible"
+    sp, en, en_ctrl, sp_ctrl = tab_visibility("spars")
+    assert sp["display"] == "block" and en["display"] == "none"
+    assert en_ctrl["display"] == "none" and sp_ctrl["display"] == "flex"
+    sp, en, en_ctrl, sp_ctrl = tab_visibility("energy")
+    assert sp["display"] == "none" and en["display"] == "block"
+    assert en_ctrl["display"] == "flex" and sp_ctrl["display"] == "none"
 
 
 def test_assets_css_present_and_packaged():
@@ -182,6 +181,38 @@ def test_figures_use_shared_eda_theme():
     fig2 = figures.sparam_figure(spars)
     assert fig2.layout.colorway[0] == "#1d5a9e"
     assert fig2.layout.xaxis.gridcolor == "#eef0f4"
+
+
+def test_sparam_figure_default_is_mode_00():
+    import numpy as np
+
+    from pwmma.gui import figures
+    spars = {"freqs": np.array([28e9, 29e9]),
+             "s11": np.full((2, 1, 1), 0.5 + 0j), "s21": np.full((2, 1, 1), 0.5 + 0j)}
+    fig = figures.sparam_figure(spars)
+    assert {t.name for t in fig.data} == {"S11[0,0]", "S21[0,0]"}
+
+
+def test_sparam_figure_plots_cartesian_product_of_selected_modes():
+    import numpy as np
+
+    from pwmma.gui import figures
+    nf = 3
+    s11 = np.zeros((nf, 2, 2), complex)
+    s21 = np.zeros((nf, 2, 2), complex)
+    for i in range(2):
+        for j in range(2):
+            s11[:, i, j] = 0.1 * (i + 1) + 0.01 * (j + 1)
+            s21[:, i, j] = 0.5 * (i + 1) + 0.02 * (j + 1)
+    spars = {"freqs": np.linspace(28e9, 34e9, nf), "s11": s11, "s21": s21}
+
+    fig = figures.sparam_figure(spars, out_modes=[0, 1], in_modes=[0])
+    # {0,1} x {0} cartesian product, each pair -> an S11 and an S21 curve
+    assert {t.name for t in fig.data} == {"S11[0,0]", "S21[0,0]", "S11[1,0]", "S21[1,0]"}
+
+    # the S21[1,0] curve carries |s21[:,1,0]| in dB
+    s21_10 = next(t for t in fig.data if t.name == "S21[1,0]")
+    assert np.allclose(np.asarray(s21_10.y), 20 * np.log10(abs(0.5 * 2 + 0.02)))
 
 
 def _synthetic_section():

@@ -133,6 +133,18 @@ def _right_panel() -> html.Div:
         ]),
         html.Div([
             html.Div([
+                html.Span("output mode(s)", className="lbl"),
+                dcc.Dropdown(id="spars-out-modes", multi=True, value=[0],
+                             options=[{"label": "0", "value": 0}], clearable=False,
+                             className="dd-modes"),
+                html.Span("input mode(s)", className="lbl"),
+                dcc.Dropdown(id="spars-in-modes", multi=True, value=[0],
+                             options=[{"label": "0", "value": 0}], clearable=False,
+                             className="dd-modes"),
+                html.Span("· |S11| reflection + |S21| transmission, dB",
+                          className="hint"),
+            ], id="spars-controls", className="energy-controls-row"),
+            html.Div([
                 html.Span("section", className="lbl"),
                 dcc.Dropdown(id="section-select", placeholder="section",
                              className="dd-small"),
