@@ -260,6 +260,65 @@ def test_energy_heatmap_marks_cutoff_boundary_and_filters_modes():
     assert np.asarray(fig2.data[0].z).shape[0] == 1
 
 
+def test_result_figures_have_dynamic_height():
+    """Result figures must not pin a pixel height, so the graph can fill its flex
+    container; only the small left-panel structure preview stays fixed-size."""
+    import numpy as np
+
+    from pwmma.gui import figures
+
+    spars = {"freqs": np.array([28e9, 29e9]),
+             "s11": np.full((2, 1, 1), 0.5 + 0j), "s21": np.full((2, 1, 1), 0.5 + 0j)}
+    dynamic = [
+        figures.empty_figure("x"),
+        figures.sparam_figure(spars),
+        figures.energy_line_figure(_synthetic_section(), dB=False),
+        figures.energy_heatmap_figure(_synthetic_section()),
+    ]
+    for fig in dynamic:
+        assert fig.layout.height is None, "result figures must not pin a height"
+        assert fig.layout.autosize is True
+
+    preview = figures.structure_preview_figure(
+        [{"kind": "rec", "a": 7.0, "b": 3.0, "l": 2.0}], False)
+    assert preview.layout.height == 216
+
+
+def test_result_graphs_are_responsive_and_flex():
+    from pwmma.gui.layout import build_layout
+    root = build_layout()
+    found = {}
+
+    def walk(c):
+        cid = getattr(c, "id", None)
+        if cid in ("sparam-graph", "energy-graph"):
+            found[cid] = c
+        children = getattr(c, "children", None)
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                walk(child)
+        elif children is not None:
+            walk(children)
+
+    walk(root)
+    for cid in ("sparam-graph", "energy-graph"):
+        g = found[cid]
+        assert getattr(g, "responsive", None) is True, f"{cid} must be responsive"
+        assert "result-graph" in (getattr(g, "className", "") or ""), \
+            f"{cid} must use the result-graph class"
+
+
+def test_css_result_graph_has_flex_and_min_height():
+    from pathlib import Path
+
+    import pwmma.gui as gui
+    text = (Path(gui.__file__).parent / "assets" / "style.css").read_text(encoding="utf-8")
+    assert ".result-graph" in text, "style.css missing .result-graph rule"
+    idx = text.index(".result-graph")
+    rule = text[idx:idx + 200]
+    assert "flex" in rule and "min-height" in rule
+
+
 def test_mode_filter_mask_parses_te_tm_m_n():
     from pwmma.gui.callbacks import mode_filter_mask
 

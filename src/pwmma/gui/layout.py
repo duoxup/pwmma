@@ -157,8 +157,8 @@ def _right_panel() -> html.Div:
                           debounce=True, className="num-xs"),
                 html.Span("GHz", className="lbl"),
             ], id="energy-controls", className="energy-controls-row"),
-            dcc.Graph(id="sparam-graph"),
-            dcc.Graph(id="energy-graph"),
+            dcc.Graph(id="sparam-graph", className="result-graph", responsive=True),
+            dcc.Graph(id="energy-graph", className="result-graph", responsive=True),
             html.Div(id="status", className="error-text"),
         ], className="plot-frame"),
     ], className="right-panel")

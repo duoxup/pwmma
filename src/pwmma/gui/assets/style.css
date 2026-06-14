@@ -212,8 +212,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   border: 1px solid var(--border-med); background: #fff;
   flex: 1; min-height: 0; padding: 8px;
   display: flex; flex-direction: column;
-  overflow: auto;  /* short windows: scroll inside the frame, don't clip the 528px graphs */
+  overflow: auto;  /* short windows: scroll inside the frame, never below the graph min-height */
 }
+/* Result graphs fill the leftover frame height (tall windows) but never shrink
+   below a readable floor (short windows then scroll via .plot-frame overflow).
+   The tab-switch callback only toggles `display`, which leaves these intact. */
+.result-graph { flex: 1 1 auto; min-height: 460px; }
 .energy-controls-row {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   padding: 2px 4px 6px;

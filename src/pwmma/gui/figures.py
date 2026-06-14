@@ -101,7 +101,7 @@ def sparam_figure(spars: dict, *, excitation_mode: int = 0) -> go.Figure:
             db = 20.0 * np.log10(np.abs(mat[:, e, e]))
         fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines", name=name))
     fig.update_layout(
-        height=528,
+        autosize=True,
         margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)",
         yaxis_title="Magnitude (dB)",
@@ -150,7 +150,7 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
                                  mode="lines", name="Σ evan.",
                                  line=dict(dash="dot", color="#1a1d21")))
     fig.update_layout(
-        height=528, margin=dict(l=50, r=10, t=30, b=40),
+        autosize=True, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Net modal power",
         legend=dict(orientation="h"),
     )
@@ -202,7 +202,7 @@ def energy_heatmap_figure(section, *, mode_mask=None, max_modes: int | None = No
     step = 1 if mode_mask is not None else max(1, len(shown) // 12)
     tickvals = np.arange(0, len(shown), step)
     fig.update_layout(
-        height=528, margin=dict(l=50, r=10, t=30, b=40),
+        autosize=True, margin=dict(l=50, r=10, t=30, b=40),
         xaxis_title="Frequency (GHz)", yaxis_title="Mode",
         yaxis=dict(tickvals=tickvals, ticktext=[labels[int(i)] for i in tickvals]),
         legend=dict(orientation="h"),
@@ -213,5 +213,5 @@ def energy_heatmap_figure(section, *, mode_mask=None, max_modes: int | None = No
 def empty_figure(message: str) -> go.Figure:
     fig = go.Figure()
     fig.add_annotation(text=message, showarrow=False, font=dict(size=16, color="#aab0bb"))
-    fig.update_layout(height=528, xaxis=dict(visible=False), yaxis=dict(visible=False))
+    fig.update_layout(autosize=True, xaxis=dict(visible=False), yaxis=dict(visible=False))
     return _theme(fig, axes=False)
