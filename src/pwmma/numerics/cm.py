@@ -75,7 +75,36 @@ def _wrapper_rec2cir(args):    #small rec to large circular --> cm_rc
 
 
 def _wrapper_cir2rec(args):    #small cir to large rec --> cm_cr
-    raise NotImplementedError()
+    i, j, R, a, b, mi_1, mi_2 = args            # mi_1 = cir (small), mi_2 = rec (large)
+    type_cir, type_rec = mi_1.mode_type, mi_2.mode_type
+    polar_cir = mi_1.polar_dir
+    q = mi_1.mode_num1                          # circular azimuthal index
+    m, n = mi_2.mode_num1, mi_2.mode_num2       # rectangular indices
+    kc_cir = mi_1.kc
+    kc_rec = mi_2.kc
+    norm_factor = mi_1.plus_dir * mi_1.norm_constant * mi_2.norm_constant
+
+    args_calc = a, b, R, m, n, q, kc_cir, kc_rec, norm_factor
+    match (type_cir, type_rec, polar_cir):
+        case (1, 1, 1):
+            func = cm_cr.hh_c
+        case (1, 1, 0):
+            func = cm_cr.hh_s
+        case (0, 0, 1):
+            func = cm_cr.ee_c
+        case (0, 0, 0):
+            func = cm_cr.ee_s
+        case (1, 0, 1):
+            func = cm_cr.he_c
+        case (1, 0, 0):
+            func = cm_cr.he_s
+        case (0, 1, 1):
+            func = cm_cr.eh_c
+        case (0, 1, 0):
+            func = cm_cr.eh_s
+        case _:
+            raise ValueError(f'Unknown mode info found: ({type_cir}, {type_rec}, {polar_cir})')
+    return i, j, func(*args_calc)
 
 def _wrapper_cir2cir(args):    #wg1 is the smaller one
     i, j, r01, r02, mi_1, mi_2 = args

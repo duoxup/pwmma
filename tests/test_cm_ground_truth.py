@@ -53,3 +53,29 @@ def test_cm_rr_matches_physical_overlap():
     analytic = calc_coupling_matrix(Transition(small, large))
     gt = _overlap_over_rect(small, large)
     assert np.linalg.norm(analytic - gt) / np.linalg.norm(gt) < 1e-2
+
+
+def _overlap_over_disk(cir, other, nr=700, nphi=1100):
+    """∬_{disk aperture} e^cir_i · e^other_j dA on a polar grid (rows=cir)."""
+    rs = np.linspace(0.0, cir.r, nr)
+    ph = np.linspace(0.0, 2 * np.pi, nphi)
+    RHO, PHI = np.meshgrid(rs, ph)
+    X, Y = RHO * np.cos(PHI), RHO * np.sin(PHI)
+    f1 = [cir.get_mode_efield_distribution_at_gridpoints(i, X, Y) for i in range(cir.N)]
+    f2 = [other.get_mode_efield_distribution_at_gridpoints(j, X, Y) for j in range(other.N)]
+    C = np.empty((cir.N, other.N))
+    for i, a in enumerate(f1):
+        for j, b in enumerate(f2):
+            integ = (np.real(a.Ex) * np.real(b.Ex) + np.real(a.Ey) * np.real(b.Ey)) * RHO
+            C[i, j] = _trap(_trap(integ, rs, axis=1), ph)
+    return C
+
+
+def test_cm_cr_matches_physical_overlap_with_correct_sign():
+    cir = CirWG(r=1.0, l=1, N=6, er=1)          # small (rows)
+    rec = RecWG(a=5.0, b=4.0, l=1, N=6, er=1)    # large (cols)
+    analytic = calc_coupling_matrix(Transition(cir, rec))
+    gt = _overlap_over_disk(cir, rec)
+    nrm = np.linalg.norm(gt)
+    assert np.linalg.norm(analytic - gt) / nrm < 2e-2       # correct sign + magnitude
+    assert np.linalg.norm(analytic + gt) / nrm > 1.0        # not the flipped sign
