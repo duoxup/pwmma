@@ -79,3 +79,12 @@ def test_cm_cr_matches_physical_overlap_with_correct_sign():
     nrm = np.linalg.norm(gt)
     assert np.linalg.norm(analytic - gt) / nrm < 2e-2       # correct sign + magnitude
     assert np.linalg.norm(analytic + gt) / nrm > 1.0        # not the flipped sign
+
+
+def test_cm_cc_matches_physical_overlap():
+    small = CirWG(r=1.0, l=1, N=6, er=1)         # small (rows)
+    large = CirWG(r=2.5, l=1, N=6, er=1)         # large (cols)
+    analytic = calc_coupling_matrix(Transition(small, large))
+    gt = _overlap_over_disk(small, large)
+    assert np.all(np.isfinite(analytic))
+    assert np.linalg.norm(analytic - gt) / np.linalg.norm(gt) < 2e-2
