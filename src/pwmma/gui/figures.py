@@ -114,6 +114,10 @@ def sparam_figure(spars: dict, *, out_modes=(0,), in_modes=(0,)) -> go.Figure:
                 if 0 <= i < mat.shape[1]:
                     with np.errstate(divide="ignore"):
                         db = 20.0 * np.log10(np.abs(mat[:, i, j]))
+                    # |S| == 0 (pervasive in cir<->cir junctions by azimuthal
+                    # symmetry) -> -inf, which breaks Plotly's y autoscale and
+                    # blanks the panel; NaN is skipped instead of plotted.
+                    db = np.where(np.isfinite(db), db, np.nan)
                     fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines",
                                              name=f"{label}[{i},{j}]"))
     fig.update_layout(

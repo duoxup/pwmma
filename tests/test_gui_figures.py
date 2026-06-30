@@ -47,6 +47,22 @@ def test_sparam_figure_has_traces_in_db():
     assert "dB" in (fig.layout.yaxis.title.text or "")
 
 
+def test_sparam_figure_zero_sparam_has_no_minus_inf():
+    """|S| == 0 (pervasive in cir<->cir junctions by azimuthal symmetry) gives
+    20*log10(0) == -inf, which breaks Plotly's y autoscale and blanks the panel.
+    Such points must be dropped (NaN), never -inf; finite traces stay intact.
+    """
+    spars = _fake_spars()
+    spars["s11"][:, 0, 0] = 0.0          # exact-zero dominant-mode reflection
+    spars["s21"][:, 1, 0] = 0.0          # exact-zero off-diagonal transmission
+    fig = F.sparam_figure(spars, out_modes=[0, 1], in_modes=[0])
+    for t in fig.data:
+        y = np.asarray(t.y, dtype=float)
+        assert not np.isinf(y).any()     # no -inf anywhere
+    s21_00 = next(t for t in fig.data if t.name == "S21[0,0]")
+    assert np.all(np.isfinite(np.asarray(s21_00.y, dtype=float)))  # nonzero trace intact
+
+
 def _small_section():
     rwg = RecWG(a=7.112e-3, b=3.556e-3, l=2e-3, N=24)
     cwg = CirWG(r=4.2e-3, l=1.5e-3, N=64)
