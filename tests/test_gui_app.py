@@ -126,6 +126,40 @@ def test_result_payload_survives_diskcache_roundtrip(tmp_path):
                                     threshold=0.04, db=True), go.Figure)
 
 
+def test_store_payload_detects_payload_too_large_for_cache(tmp_path):
+    """diskcache culls any value bigger than its size_limit right after set (the
+    value vanishes yet set() still returns truthy), which surfaced as a confusing
+    'Run first'. store_payload must report that non-persistence."""
+    import diskcache
+    import numpy as np
+
+    from pwmma.gui.callbacks import store_payload
+    cache = diskcache.Cache(str(tmp_path / "c"), size_limit=2**20)  # 1 MB
+    try:
+        too_big = {"spars": {"s11": np.zeros(2**20, dtype=np.float64)}}  # ~8 MB
+        assert store_payload(cache, "big", too_big) is False
+        assert "big" not in cache
+        small = {"spars": {"s11": np.zeros(8, dtype=np.float64)}}
+        assert store_payload(cache, "small", small) is True
+        assert cache.get("small") is not None
+    finally:
+        cache.close()
+
+
+def test_too_large_message_tells_user_to_reduce_modes(tmp_path):
+    import diskcache
+    import numpy as np
+
+    from pwmma.gui.callbacks import payload_too_large_message
+    cache = diskcache.Cache(str(tmp_path / "c"), size_limit=2**20)
+    try:
+        payload = {"spars": {"s11": np.zeros((3, 800, 800), dtype=np.complex128)}}
+        msg = payload_too_large_message(payload, cache)
+    finally:
+        cache.close()
+    assert "N" in msg and "too large" in msg.lower()
+
+
 def test_defaults_save_load_roundtrip(tmp_path, monkeypatch):
     from pwmma.gui import defaults
     monkeypatch.setattr(defaults, "_PATH", str(tmp_path / "d.json"))

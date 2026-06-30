@@ -281,6 +281,33 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
     }, None
 
 
+def store_payload(cache, token, payload) -> bool:
+    """Persist ``payload`` under ``token``; return whether it survived.
+
+    The background worker and the UI process share results only through the
+    diskcache, so the heavy arrays must round-trip through it. diskcache culls
+    any value larger than its ``size_limit`` immediately on ``set`` (the value is
+    gone, yet ``set`` still returns truthy) — which otherwise surfaces as a
+    confusing 'Run first' placeholder. ``token in cache`` is a cheap key check
+    (no deserialize) that detects the cull.
+    """
+    cache.set(token, payload)
+    return token in cache
+
+
+def payload_too_large_message(payload, cache) -> str:
+    """Actionable error when a result exceeded the diskcache size_limit."""
+    spars = payload.get("spars")
+    detail = ""
+    if spars is not None:
+        mb = sum(np.asarray(v).nbytes for v in spars.values()) / 2**20
+        detail = f" (S-parameter arrays ~{mb:.0f} MB)"
+    limit_mb = getattr(cache, "size_limit", 0) / 2**20
+    return (f"result too large to display{detail}: it exceeds the {limit_mb:.0f} MB "
+            f"result cache. Reduce the mode count N (or the number of frequency "
+            f"points) and run again.")
+
+
 def register_run_callback(app):
     @app.callback(
         output=[Output("result-store", "data"), Output("status", "children")],
@@ -325,7 +352,9 @@ def register_run_callback(app):
             set_progress(("error — see message panel", "0", bar_max, "led led-error"))
             return None, error
         token = f"run-{n_clicks}"
-        app._pwmma_cache.set(token, payload)
+        if not store_payload(app._pwmma_cache, token, payload):
+            set_progress(("error — see message panel", "0", bar_max, "led led-error"))
+            return None, payload_too_large_message(payload, app._pwmma_cache)
         set_progress(("done", bar_max, bar_max, "led led-done"))
         return {"token": token, "section_indices": payload["section_indices"],
                 "compute": payload["compute"],
