@@ -168,3 +168,16 @@ def test_cm_cr_lommel_confluent_limit():
                         for i in range(kc_cir.shape[0])])
         assert np.isfinite(vec).all()
         np.testing.assert_allclose(vec, ref, **_PARITY)
+
+
+# ---- pool removal / inert config --------------------------------------------
+
+def test_cmconfig_nproc_is_inert():
+    """The computation is pool-free now; CMConfig.nproc must not affect results
+    (it is kept only as an inert field pending GUI cleanup)."""
+    small = RecWG(a=3.556e-3, b=1.778e-3, N=16)
+    large = CirWG(r=4.2e-3, N=40)
+    t = pwmma.Transition(small, large)
+    cm1 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=1))
+    cm7 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=7))
+    np.testing.assert_array_equal(cm1, cm7)

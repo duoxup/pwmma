@@ -151,23 +151,30 @@ def _ipow_vec(k):
     return _I_POW_ARR[k % 4]
 
 
-def _lommel_vec(q, kc_cir, kc_rect, R, cir_te):
-    """Vectorized _lommel over grids. The confluent (coincident-cutoff) limit is
-    selected with np.where after guarding the denominator so the general branch
-    never divides by zero."""
-    a_arg = kc_cir * R
-    b_arg = kc_rect * R
+def _lommel_from_bessel(q, kc_cir, kc_rect, R, b_arg, jq_a, jpq_a, jq_b, jpq_b, cir_te):
+    """Vectorized _lommel from precomputed Bessel arrays (so a caller that needs
+    both the TE and TM variants evaluates jv/jvp on the grid only once). The
+    confluent (coincident-cutoff) limit is selected with np.where after guarding
+    the denominator so the general branch never divides by zero."""
     denom = kc_rect ** 2 - kc_cir ** 2
     mask = np.abs(denom) < 1e-12 * np.maximum(kc_rect ** 2, 1.0)
     safe = np.where(mask, 1.0, denom)
-    limit = (R ** 2 / 2.0) * (jvp(q, b_arg) ** 2
-                              + (1.0 - (q / b_arg) ** 2) * jv(q, b_arg) ** 2)
+    limit = (R ** 2 / 2.0) * (jpq_b ** 2 + (1.0 - (q / b_arg) ** 2) * jq_b ** 2)
     with np.errstate(divide="ignore", invalid="ignore"):
         if cir_te:
-            general = -R * kc_rect * jv(q, a_arg) * jvp(q, b_arg) / safe
+            general = -R * kc_rect * jq_a * jpq_b / safe
         else:
-            general = R * kc_cir * jvp(q, a_arg) * jv(q, b_arg) / safe
+            general = R * kc_cir * jpq_a * jq_b / safe
     return np.where(mask, limit, general)
+
+
+def _lommel_vec(q, kc_cir, kc_rect, R, cir_te):
+    """Standalone vectorized _lommel (evaluates its own Bessel arrays)."""
+    a_arg = kc_cir * R
+    b_arg = kc_rect * R
+    return _lommel_from_bessel(q, kc_cir, kc_rect, R, b_arg,
+                               jv(q, a_arg), jvp(q, a_arg), jv(q, b_arg),
+                               jvp(q, b_arg), cir_te)
 
 
 def block_vectorized(wg1, wg2, m1, m2):
@@ -203,8 +210,16 @@ def block_vectorized(wg1, wg2, m1, m2):
     sig_sin_tm = 2 * cn * sinqphi * (ipm + sgnq * ipmm)
 
     ipq = _ipow_vec(q)
-    lom_te = _lommel_vec(q, kc_cir, kc_rect, R, cir_te=True)
-    lom_tm = _lommel_vec(q, kc_cir, kc_rect, R, cir_te=False)
+    # Shared Bessel arrays: jv/jvp on the (N1,N2) grid are evaluated once and
+    # reused across the TE and TM Lommel integrals and the he prefactor.
+    a_arg = kc_cir * R          # (N1,1)
+    b_arg = kc_rect * R         # (1,N2)
+    jq_a = jv(q, a_arg)         # == jv(q, kc_cir*R)   (N1,1)
+    jpq_a = jvp(q, a_arg)       # (N1,1)
+    jq_b = jv(q, b_arg)         # == jv(q, kc_rect*R)  (N1,N2)
+    jpq_b = jvp(q, b_arg)       # (N1,N2)
+    lom_te = _lommel_from_bessel(q, kc_cir, kc_rect, R, b_arg, jq_a, jpq_a, jq_b, jpq_b, True)
+    lom_tm = _lommel_from_bessel(q, kc_cir, kc_rect, R, b_arg, jq_a, jpq_a, jq_b, jpq_b, False)
 
     is_c = pc == 1
     sig_te = np.where(is_c, sig_cos_te, sig_sin_te)
@@ -213,7 +228,7 @@ def block_vectorized(wg1, wg2, m1, m2):
 
     hh_block = kc_cir ** 2 * norm * (np.pi / 2) * ipq * lom_te * sig_te
     ee_block = kc_rect ** 2 * norm * (-(np.pi / 2)) * ipq * lom_tm * sig_tm
-    pref = norm * q * jv(q, kc_cir * R) * (np.pi / 2) * ipq * jv(q, kc_rect * R)
+    pref = norm * q * jq_a * (np.pi / 2) * ipq * jq_b
     he_block = pref * he_sig
 
     out = np.zeros(np.broadcast_shapes(tc.shape, tr.shape), dtype=float)
