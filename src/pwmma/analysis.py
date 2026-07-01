@@ -564,9 +564,8 @@ def analyze_energy_coupling(
     # waveguides used to compute impedances and propagation factors.
     lossless_wgs = tuple(_lossless_wg(wg) for wg in physical_wgs)
 
-    cm_config, sm_config = config.cmconf, config.smconf
-    cnp = get_array_backend(sm_config.use_gpu)
-    dtype = cnp.complex64 if not sm_config.use_double_precision else cnp.complex128
+    cnp = get_array_backend(config.use_gpu)
+    dtype = cnp.complex64 if not config.use_double_precision else cnp.complex128
 
     if len(freqs) == 0:
         raise ValueError(
@@ -588,9 +587,9 @@ def analyze_energy_coupling(
     )
 
     # heavy_computation is now vectorized and pool-free; cap BLAS to
-    # ``sm_config.nproc`` so this in-process sweep uses ~nproc cores instead of
+    # ``config.nproc`` so this in-process sweep uses ~nproc cores instead of
     # letting OpenBLAS saturate the machine.
-    with threadpool_limits(limits=sm_config.nproc):
+    with threadpool_limits(limits=config.nproc):
         zarr_list = [
             cnp.asarray(hc.impedance_array(wg, freqs), dtype=dtype)
             for wg in lossless_wgs
@@ -601,7 +600,7 @@ def analyze_energy_coupling(
         ]
 
     if cms is None:
-        cms = [cnp.asarray(get_coupling_matrix(wgt, cm_config), dtype=dtype)
+        cms = [cnp.asarray(get_coupling_matrix(wgt, config), dtype=dtype)
                for wgt in base_transitions]
     else:
         cms = [cnp.asarray(c, dtype=dtype) for c in cms]
@@ -641,7 +640,7 @@ def analyze_energy_coupling(
 
         iterator = tqdm(iterator, total=len(freqs))
 
-    with threadpool_limits(limits=sm_config.nproc):
+    with threadpool_limits(limits=config.nproc):
         for idx_f, _ in iterator:
             base_single_s = []
             for idx_t, cm in enumerate(cms):

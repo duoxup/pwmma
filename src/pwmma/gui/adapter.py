@@ -7,7 +7,7 @@ import numpy as np
 from waveguides import WG, CirWG, RecWG
 
 from .. import analyze_energy_coupling
-from ..config import CMConfig, Config, SMConfig
+from ..config import Config
 from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
 from ..io.numpy import prune_coupling_matrix_cache
@@ -77,29 +77,24 @@ def parse_freqs(start_ghz, stop_ghz, n_points) -> np.ndarray:
     return np.linspace(start, stop, n) * 1e9
 
 
-def parse_config(cm: dict, sm: dict) -> Config:
+def parse_config(cfg: dict) -> Config:
     # Accept the GUI's "single"/"double" labels (and the raw numpy names).
-    precision = str(sm.get("precision", "single"))
-    cache_dir = cm.get("cache_dir") or None
-    use_cache = bool(cm.get("cache_enabled")) and cache_dir is not None
+    precision = str(cfg.get("precision", "single"))
+    cache_dir = cfg.get("cache_dir") or None
+    use_cache = bool(cfg.get("cache_enabled")) and cache_dir is not None
     return Config(
-        cmconf=CMConfig(
-            nproc=int(cm.get("nproc", 8)),
-            cm_cache_dir=cache_dir if use_cache else None,
-            try_read_cm_from_cache=use_cache,
-            save_cm_to_cache=use_cache,
-        ),
-        smconf=SMConfig(
-            nproc=int(sm.get("nproc", 8)),
-            use_gpu=bool(sm.get("use_gpu", True)),
-            use_double_precision=(precision in ("double", "complex128")),
-        ),
+        nproc=int(cfg.get("nproc", 8)),
+        use_gpu=bool(cfg.get("use_gpu", True)),
+        use_double_precision=(precision in ("double", "complex128")),
+        cm_cache_dir=cache_dir if use_cache else None,
+        try_read_cm_from_cache=use_cache,
+        save_cm_to_cache=use_cache,
     )
 
 
 def compute_cms(chain, config):
     """Raw coupling matrices for the chain's transitions (one per junction)."""
-    return [get_coupling_matrix(wgt, config.cmconf) for wgt in chain.transitions]
+    return [get_coupling_matrix(wgt, config) for wgt in chain.transitions]
 
 
 def run_energy(chain, freqs, config, *, sections, excitation_mode=0,

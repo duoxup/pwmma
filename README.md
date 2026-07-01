@@ -63,10 +63,7 @@ dsk = CirWG(r=5.4e-3, er=9.2,      N=800)
 chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
 
 # Configure computation
-config = pwmma.Config(
-    cmconf=pwmma.CMConfig(nproc=8),
-    smconf=pwmma.SMConfig(use_gpu=True, use_double_precision=False),
-)
+config = pwmma.Config(nproc=8, use_gpu=True, use_double_precision=False)
 
 # Frequency sweep
 freqs = np.linspace(600e9, 740e9, 281)
@@ -179,13 +176,10 @@ Coupling matrix computation can be expensive. Enable caching to persist results 
 
 ```python
 config = pwmma.Config(
-    cmconf=pwmma.CMConfig(
-        nproc=8,
-        cm_cache_dir='/path/to/cm_cache',   # created automatically if absent
-        try_read_cm_from_cache=True,
-        save_cm_to_cache=True,
-    ),
-    smconf=pwmma.SMConfig(),
+    nproc=8,
+    cm_cache_dir='/path/to/cm_cache',   # created automatically if absent
+    try_read_cm_from_cache=True,
+    save_cm_to_cache=True,
 )
 ```
 
@@ -217,7 +211,7 @@ logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s')
 | `plot_section_energy_coupling(section, ...)` | Plot propagating/evanescent modal contributions for one section |
 | `plot_chain_energy_overview(result, ...)` | Compare total propagating/evanescent power and balance error across sections |
 | `save_figure(fig, path, dpi=160)` | Save a matplotlib figure and create parent directories if needed |
-| `get_coupling_matrix(transition, cmconfig)` | Compute (or load from cache) the coupling matrix for a single junction |
+| `get_coupling_matrix(transition, config)` | Compute (or load from cache) the coupling matrix for a single junction |
 
 ### Input structures
 
@@ -230,9 +224,7 @@ logging.basicConfig(format='%(name)s [%(levelname)s] %(message)s')
 
 | Symbol | Key fields |
 |--------|-----------|
-| `CMConfig(nproc, ...)` | Coupling matrix: parallelism, caching |
-| `SMConfig(nproc, use_gpu, use_double_precision, ...)` | Scattering matrix: backend, precision |
-| `Config(cmconf, smconf)` | Container for both configs |
+| `Config(nproc, use_gpu, use_double_precision, try_read_cm_from_cache, save_cm_to_cache, cm_cache_dir)` | Single flat config: `nproc` is the pipeline-wide BLAS-thread budget; the `cm_*` fields control the coupling-matrix disk cache |
 
 ### Mid-level numerical API (`pwmma.numerics`)
 
@@ -240,7 +232,7 @@ For research use when individual computation steps are needed:
 
 | Symbol | Description |
 |--------|-------------|
-| `calc_coupling_matrix(transition, nproc=1)` | Raw coupling matrix (no caching) |
+| `calc_coupling_matrix(transition)` | Raw coupling matrix (no caching) |
 | `calc_scattering_matrix(cm, z1, z2, ...)` | Single-junction scattering matrix |
 | `cascade_generalized_scattering_matrice(SA, SB, ...)` | Redheffer star product |
 | `apply_propagation_factors_to_smatrix(...)` | Shift S-matrix reference planes |

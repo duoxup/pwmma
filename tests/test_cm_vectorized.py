@@ -204,16 +204,16 @@ def test_cm_rc_vectorized_matches_scalar():
     np.testing.assert_allclose(vec, ref, rtol=1e-9, atol=1e-11 * scale)
 
 
-# ---- CMConfig.nproc must not change results ----------------------------------
+# ---- Config.nproc must not change results ------------------------------------
 
 def test_cmconfig_nproc_does_not_change_results():
-    """All four junction families are vectorized; CMConfig.nproc only caps the
+    """All four junction families are vectorized; Config.nproc only caps the
     BLAS threads of the computation (interim semantics), so different values
     must yield bit-identical coupling matrices."""
     small = RecWG(a=3.556e-3, b=1.778e-3, N=16)
     large = CirWG(r=4.2e-3, N=40)
     t = pwmma.Transition(small, large)
     assert (t.wg1.cross_tag.lower(), t.wg2.cross_tag.lower()) == ("rec", "cir")
-    cm1 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=1))
-    cm4 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=4))
+    cm1 = pwmma.get_coupling_matrix(t, pwmma.Config(nproc=1))
+    cm4 = pwmma.get_coupling_matrix(t, pwmma.Config(nproc=4))
     np.testing.assert_array_equal(cm1, cm4)

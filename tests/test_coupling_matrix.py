@@ -21,7 +21,7 @@ def test_get_coupling_matrix_is_orientation_consistent() -> None:
     """
     rwg = RecWG(a=7.112e-3, b=3.556e-3, N=24)  # small: fits inside cwg
     cwg = CirWG(r=4.2e-3, N=64)                # large
-    config = pwmma.CMConfig(nproc=2)
+    config = pwmma.Config(nproc=2)
 
     cm_small_to_large = pwmma.get_coupling_matrix(pwmma.Transition(rwg, cwg), config)  # flag_csc == 1
     cm_large_to_small = pwmma.get_coupling_matrix(pwmma.Transition(cwg, rwg), config)  # flag_csc == 2

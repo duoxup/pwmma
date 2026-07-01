@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 """Thread-oversubscription regression tests.
 
-``SMConfig.nproc`` is a BLAS-thread budget: the S-matrix sweep runs in-process
+``Config.nproc`` is a BLAS-thread budget: the S-matrix sweep runs in-process
 (the vectorized ``heavy_computation`` core has no pool) and its linear algebra
 goes to OpenBLAS, which defaults to *all* cores. The result is that ``nproc=1``
 would still saturate the machine. ``nproc`` should instead mean "use about this
 many cores", so the sweep must run with the BLAS thread pool capped to
-``sm_config.nproc``.
+``config.nproc``.
 """
 
 from __future__ import annotations
@@ -53,12 +53,8 @@ def test_serial_sweep_caps_blas_threads_to_nproc(monkeypatch) -> None:
     small = CirWG(r=3.0e-3, l=2e-3, N=12)
     large = CirWG(r=4.2e-3, l=2e-3, N=16)
     config = pwmma.Config(
-        cmconf=pwmma.CMConfig(
-            nproc=1, try_read_cm_from_cache=False, save_cm_to_cache=False
-        ),
-        smconf=pwmma.SMConfig(
-            nproc=nproc, use_gpu=False, use_double_precision=False
-        ),
+        nproc=nproc, use_gpu=False, use_double_precision=False,
+        try_read_cm_from_cache=False, save_cm_to_cache=False,
     )
 
     pwmma.calc_spars_of_wgchain(
@@ -91,12 +87,8 @@ def test_energy_sweep_caps_blas_threads_to_nproc(monkeypatch) -> None:
     c2 = CirWG(r=4.2e-3, l=1.5e-3, N=16)
     c3 = CirWG(r=5.4e-3, l=1.0e-3, N=20)
     config = pwmma.Config(
-        cmconf=pwmma.CMConfig(
-            nproc=1, try_read_cm_from_cache=False, save_cm_to_cache=False
-        ),
-        smconf=pwmma.SMConfig(
-            nproc=nproc, use_gpu=False, use_double_precision=False
-        ),
+        nproc=nproc, use_gpu=False, use_double_precision=False,
+        try_read_cm_from_cache=False, save_cm_to_cache=False,
     )
 
     pwmma.analyze_energy_coupling(

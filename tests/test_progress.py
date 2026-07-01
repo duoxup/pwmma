@@ -11,8 +11,7 @@ import pwmma
 
 def _cpu_config() -> pwmma.Config:
     return pwmma.Config(
-        cmconf=pwmma.CMConfig(nproc=2),
-        smconf=pwmma.SMConfig(nproc=2, use_gpu=False),
+        nproc=2, use_gpu=False,
     )
 
 
@@ -56,7 +55,7 @@ def test_core_funcs_accept_precomputed_cms() -> None:
     chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
     freqs = np.linspace(28.0, 34.0, 3) * 1e9
     cfg = _cpu_config()
-    cms = [get_coupling_matrix(t, cfg.cmconf) for t in chain.transitions]
+    cms = [get_coupling_matrix(t, cfg) for t in chain.transitions]
 
     # Passing precomputed coupling matrices must give identical results to
     # computing them internally.

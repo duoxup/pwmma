@@ -26,16 +26,11 @@ def ka_window_analysis() -> pwmma.ChainEnergyCouplingResult:
     chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
     freqs = np.linspace(28.0, 34.0, 3) * 1e9
     config = pwmma.Config(
-        cmconf=pwmma.CMConfig(
-            nproc=2,
-            try_read_cm_from_cache=False,
-            save_cm_to_cache=False,
-        ),
-        smconf=pwmma.SMConfig(
-            nproc=2,
-            use_gpu=False,
-            use_double_precision=False,
-        ),
+        nproc=2,
+        use_gpu=False,
+        use_double_precision=False,
+        try_read_cm_from_cache=False,
+        save_cm_to_cache=False,
     )
     return pwmma.analyze_energy_coupling(
         chain,
@@ -156,8 +151,7 @@ def test_excitation_mode_nonzero(tmp_path: Path) -> None:
     chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
     freqs = np.linspace(28.0, 34.0, 3) * 1e9
     config = pwmma.Config(
-        cmconf=pwmma.CMConfig(nproc=2),
-        smconf=pwmma.SMConfig(nproc=2, use_gpu=False),
+        nproc=2, use_gpu=False,
     )
     result = pwmma.analyze_energy_coupling(
         chain, freqs, config, sections=[1], excitation_mode=1, show_progress=False,
@@ -211,8 +205,7 @@ def test_modal_analysis_applies_lossless_assumption() -> None:
         chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
         freqs = np.linspace(28.0, 34.0, 3) * 1e9
         config = pwmma.Config(
-            cmconf=pwmma.CMConfig(nproc=2),
-            smconf=pwmma.SMConfig(nproc=2, use_gpu=False),
+            nproc=2, use_gpu=False,
         )
         return pwmma.analyze_energy_coupling(
             chain, freqs, config, sections=[2], show_progress=False,

@@ -69,7 +69,7 @@ def _small_section():
     dsk = CirWG(r=5.4e-3, l=0.26e-3, N=96, er=9.2)
     chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
     freqs = np.linspace(28e9, 34e9, 3)
-    cfg = pwmma.Config(pwmma.CMConfig(nproc=2), pwmma.SMConfig(nproc=2, use_gpu=False))
+    cfg = pwmma.Config(nproc=2, use_gpu=False)
     return pwmma.analyze_energy_coupling(chain, freqs, cfg, sections=[2],
                                          show_progress=False).get_section(2)
 

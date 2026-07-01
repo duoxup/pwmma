@@ -15,7 +15,7 @@ from .main import calc_spars_of_wgchain
 from .coupling_matrix import get_coupling_matrix
 from .io.numpy import prune_coupling_matrix_cache
 from .inputs import Chain, Transition
-from .config import Config, CMConfig, SMConfig
+from .config import Config
 from .gpu import detect_gpu_availability
 
 # Library-level logger. By default does nothing (NullHandler).
@@ -41,8 +41,6 @@ __all__ = [
     'ChainEnergyCouplingResult',
     # Configuration
     'Config',
-    'CMConfig',
-    'SMConfig',
     # Mid-level: coupling matrix (with caching & config)
     'get_coupling_matrix',
     'prune_coupling_matrix_cache',

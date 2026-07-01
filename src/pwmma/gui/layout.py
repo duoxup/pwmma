@@ -81,12 +81,12 @@ def _left_panel(d: dict) -> html.Div:
         html.Fieldset([
             html.Legend("Solver settings"),
             html.Div([
-                _field("cm nproc", dcc.Input(id="cm-nproc", type="number",
-                                             value=d.get("cm_nproc", 8),
-                                             className="num-input")),
-                _field("sm nproc", dcc.Input(id="sm-nproc", type="number",
-                                             value=d.get("sm_nproc", 8),
-                                             className="num-input")),
+                # One pipeline-wide "use about this many cores" budget: caps the
+                # BLAS threads of the coupling-matrix build and the S-matrix sweep.
+                _field("nproc (BLAS threads)",
+                       dcc.Input(id="nproc", type="number",
+                                 value=d.get("nproc", 8),
+                                 className="num-input")),
             ], className="row"),
             html.Div([
                 dcc.Checklist(

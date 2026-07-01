@@ -7,36 +7,26 @@ Created on Thu Jan  8 20:26:35 2026
 """
 
 from dataclasses import dataclass
-from typing import Optional, Union, Literal
+from typing import Optional
 
 
 @dataclass
-class CMConfig:
-    # Core budget for the coupling-matrix computation. All four junction
-    # families are vectorized in-process; nproc caps the BLAS threads of the
-    # rec->cir kernel's batched GEMMs (and would size the scalar-fallback pool
-    # if a vectorized kernel were ever deregistered). Interim semantics —
-    # final endgame (BLAS budget vs removal) pending review.
-    nproc: int
-    chunksize: Union[int, Literal['auto']] = 'auto'  # inert (computed internally)
-    try_read_cm_from_cache: bool = False
-    save_cm_to_cache: bool = False
-    cm_cache_dir: Optional[str] = None  # must be set explicitly to enable caching
+class Config:
+    """Single flat configuration for the whole pipeline.
 
-@dataclass
-class SMConfig:
-    # BLAS-thread budget for the (in-process, vectorized) S-matrix sweep. The
-    # heavy_computation core dropped multiprocessing, so this no longer sizes a
-    # pool; it caps OpenBLAS so nproc=1 does not saturate every core.
+    Replaces the former CMConfig/SMConfig split: every computation stage is
+    vectorized and in-process now, so one BLAS-thread budget covers the
+    coupling-matrix build and the S-matrix sweep alike. The coupling-matrix
+    disk cache stays (frequency-independent, reused across runs); S-matrix
+    caching was never implemented and is intentionally dropped (its cache key
+    would span frequency grid x chain x precision x N — not worth it).
+    """
+    # "Use about this many cores": BLAS-thread cap for the in-process
+    # numerics (coupling matrices and the per-frequency GSM cascade).
     nproc: int = 8
     use_gpu: bool = True
     use_double_precision: bool = False
-    normalize: bool = True
-    try_read_sm_from_cache: bool = False
-    save_sm_to_cache: bool = False
-    sm_cache_dir: Optional[str] = None  # must be set explicitly to enable caching
-    
-@dataclass
-class Config:
-    cmconf: CMConfig
-    smconf: SMConfig
+    # Coupling-matrix disk cache. cm_cache_dir must be set to enable caching.
+    try_read_cm_from_cache: bool = False
+    save_cm_to_cache: bool = False
+    cm_cache_dir: Optional[str] = None

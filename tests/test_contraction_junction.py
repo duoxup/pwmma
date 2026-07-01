@@ -27,12 +27,8 @@ import pwmma
 def _config() -> pwmma.Config:
     """Double precision, CPU, caching off — for exact numerical comparisons."""
     return pwmma.Config(
-        cmconf=pwmma.CMConfig(
-            nproc=2, try_read_cm_from_cache=False, save_cm_to_cache=False
-        ),
-        smconf=pwmma.SMConfig(
-            nproc=2, use_gpu=False, use_double_precision=True
-        ),
+        nproc=2, use_gpu=False, use_double_precision=True,
+        try_read_cm_from_cache=False, save_cm_to_cache=False,
     )
 
 

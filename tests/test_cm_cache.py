@@ -22,7 +22,7 @@ import pwmma
 
 
 def _cfg(cache_dir=None):
-    return pwmma.CMConfig(
+    return pwmma.Config(
         nproc=2,
         cm_cache_dir=cache_dir,
         try_read_cm_from_cache=cache_dir is not None,

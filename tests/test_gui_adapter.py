@@ -39,10 +39,10 @@ def test_parse_freqs_ghz_to_hz():
 
 
 def test_parse_config_maps_fields():
-    cfg = A.parse_config({"nproc": 8}, {"nproc": 8, "use_gpu": False, "precision": "complex64"})
-    assert cfg.cmconf.nproc == 8
-    assert cfg.smconf.use_gpu is False
-    assert cfg.smconf.use_double_precision is False
+    cfg = A.parse_config({"nproc": 8, "use_gpu": False, "precision": "complex64"})
+    assert cfg.nproc == 8
+    assert cfg.use_gpu is False
+    assert cfg.use_double_precision is False
 
 
 def test_empty_chain_raises():
@@ -73,7 +73,7 @@ def test_run_energy_returns_result_and_reports_progress():
     ]
     chain = A.parse_chain(rows, sym=True)
     freqs = A.parse_freqs(28.0, 34.0, 3)
-    cfg = A.parse_config({"nproc": 2}, {"nproc": 2, "use_gpu": False, "precision": "complex64"})
+    cfg = A.parse_config({"nproc": 2, "use_gpu": False, "precision": "complex64"})
     seen = []
     result = A.run_energy(chain, freqs, cfg, sections=[2], excitation_mode=0,
                           progress_callback=lambda d, t: seen.append((d, t)))
@@ -89,7 +89,7 @@ def test_run_spars_returns_arrays():
     ]
     chain = A.parse_chain(rows, sym=True)
     freqs = A.parse_freqs(28.0, 34.0, 3)
-    cfg = A.parse_config({"nproc": 2}, {"nproc": 2, "use_gpu": False, "precision": "complex64"})
+    cfg = A.parse_config({"nproc": 2, "use_gpu": False, "precision": "complex64"})
     out = A.run_spars(chain, freqs, cfg)
     assert set(out) == {"s11", "s12", "s21", "s22", "freqs"}
     assert out["s11"].shape[0] == 3
@@ -97,18 +97,18 @@ def test_run_spars_returns_arrays():
 
 def test_parse_config_enables_disk_cache():
     cfg = A.parse_config(
-        {"nproc": 4, "cache_dir": "/tmp/cm", "cache_enabled": True},
-        {"nproc": 4, "use_gpu": False, "precision": "single"},
+        {"nproc": 4, "use_gpu": False, "precision": "single",
+         "cache_dir": "/tmp/cm", "cache_enabled": True},
     )
-    assert cfg.cmconf.cm_cache_dir == "/tmp/cm"
-    assert cfg.cmconf.try_read_cm_from_cache is True
-    assert cfg.cmconf.save_cm_to_cache is True
+    assert cfg.cm_cache_dir == "/tmp/cm"
+    assert cfg.try_read_cm_from_cache is True
+    assert cfg.save_cm_to_cache is True
 
 
 def test_parse_config_no_cache_by_default():
-    cfg = A.parse_config({"nproc": 4}, {"nproc": 4, "use_gpu": False, "precision": "single"})
-    assert cfg.cmconf.cm_cache_dir is None
-    assert cfg.cmconf.try_read_cm_from_cache is False
+    cfg = A.parse_config({"nproc": 4, "use_gpu": False, "precision": "single"})
+    assert cfg.cm_cache_dir is None
+    assert cfg.try_read_cm_from_cache is False
 
 
 def test_compute_cms_disk_cache_roundtrip(tmp_path):
@@ -119,8 +119,8 @@ def test_compute_cms_disk_cache_roundtrip(tmp_path):
     chain = A.parse_chain(rows, sym=False)
     cdir = tmp_path / "cm"
     cfg = A.parse_config(
-        {"nproc": 2, "cache_dir": str(cdir), "cache_enabled": True},
-        {"nproc": 2, "use_gpu": False, "precision": "single"},
+        {"nproc": 2, "use_gpu": False, "precision": "single",
+         "cache_dir": str(cdir), "cache_enabled": True},
     )
     cms1 = A.compute_cms(chain, cfg)        # computes and saves to disk
     assert cdir.exists() and any(cdir.iterdir())

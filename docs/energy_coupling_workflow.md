@@ -49,16 +49,11 @@ freqs = np.linspace(28.0, 34.0, 61) * 1e9  # 28–34 GHz, 61 points
 
 ```python
 config = pwmma.Config(
-    cmconf=pwmma.CMConfig(
-        nproc=4,                       # worker processes for the rec->cir coupling matrix (others vectorized)
-        try_read_cm_from_cache=False,  # disable cache on first run
-        save_cm_to_cache=False,
-    ),
-    smconf=pwmma.SMConfig(
-        nproc=4,                       # BLAS-thread budget for the S-matrix sweep
-        use_gpu=False,                 # set to True to use CuPy
-        use_double_precision=False,    # False = complex64, True = complex128
-    ),
+    nproc=4,                       # BLAS-thread budget for the whole pipeline
+    use_gpu=False,                 # set to True to use CuPy
+    use_double_precision=False,    # False = complex64, True = complex128
+    try_read_cm_from_cache=False,  # disable coupling-matrix cache on first run
+    save_cm_to_cache=False,
 )
 ```
 

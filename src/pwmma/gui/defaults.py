@@ -15,7 +15,7 @@ BUILTIN_DEFAULTS = {
     ],
     "sym": ["sym"],
     "f_start": 28.0, "f_stop": 34.0, "f_n": 61,
-    "cm_nproc": 8, "sm_nproc": 8,
+    "nproc": 8,
     "use_gpu": ["gpu"], "precision": "single",
     "compute": "both",
     "cm_cache_enable": [], "cm_cache_dir": ".pwmma_cm_cache",
@@ -29,6 +29,10 @@ def load_defaults() -> dict:
         with open(_PATH, encoding="utf-8") as f:
             saved = json.load(f)
         if isinstance(saved, dict):
+            # legacy migration: pre-unification files stored cm_nproc/sm_nproc
+            # separately; carry the value over so a saved setting is not lost.
+            if "nproc" not in saved and ("sm_nproc" in saved or "cm_nproc" in saved):
+                saved["nproc"] = saved.get("sm_nproc", saved.get("cm_nproc"))
             state.update(saved)
     except (OSError, ValueError):
         pass

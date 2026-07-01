@@ -35,25 +35,24 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                           progress_callback: Callable[[int, int], None] | None = None,
                           cms: Sequence[np.ndarray] | None = None,
                           ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    cm_config, sm_config = config.cmconf, config.smconf
-    cnp = get_array_backend(sm_config.use_gpu)
-    dtype = cnp.complex64 if not sm_config.use_double_precision else cnp.complex128
+    cnp = get_array_backend(config.use_gpu)
+    dtype = cnp.complex64 if not config.use_double_precision else cnp.complex128
 
     backend_name = 'CuPy (GPU)' if cnp is not np else 'NumPy (CPU)'
-    precision = 'complex128' if sm_config.use_double_precision else 'complex64'
+    precision = 'complex128' if config.use_double_precision else 'complex64'
     logger.info('Backend: %s | Precision: %s | Frequencies: %d | Waveguides: %d',
                 backend_name, precision, len(freqs), wgchain.n_wgs)
     # heavy_computation is now vectorized and pool-free; cap BLAS to
-    # ``sm_config.nproc`` so this in-process sweep uses ~nproc cores instead of
+    # ``config.nproc`` so this in-process sweep uses ~nproc cores instead of
     # letting OpenBLAS saturate the machine.
-    with threadpool_limits(limits=sm_config.nproc):
+    with threadpool_limits(limits=config.nproc):
         zarr_list = [cnp.asarray(hc.impedance_array(wg, freqs), dtype=dtype)
                      for wg in wgchain.wgs]
         ps_list = [cnp.asarray(hc.propagation_factor_array(wg, freqs), dtype=dtype)
                    for wg in wgchain.wgs]
             
     if cms is None:
-        cms = [cnp.asarray(get_coupling_matrix(wgt, cm_config), dtype=dtype)
+        cms = [cnp.asarray(get_coupling_matrix(wgt, config), dtype=dtype)
                for wgt in wgchain.transitions]
     else:
         cms = [cnp.asarray(c, dtype=dtype) for c in cms]
@@ -66,7 +65,7 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
     st11 = []; st12 = []; st21 = []; st22 = []
     # The cascade runs serially in this process; cap its BLAS to ~nproc cores so
     # nproc=1 no longer saturates the machine (OpenBLAS otherwise uses them all).
-    with threadpool_limits(limits=sm_config.nproc):
+    with threadpool_limits(limits=config.nproc):
         for idx_f, f in enumerate(tqdm(freqs, disable=not show_progress)):
             counter = 0
             SA = None

@@ -71,7 +71,7 @@ def test_run_analysis_core_produces_result_payload():
         {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
     ]
     form = {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
-            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64"}
+            "nproc": 2, "use_gpu": False, "precision": "complex64"}
     progress = []
     payload, error = compute_payload(form, lambda d, t: progress.append((d, t)))
     assert error is None
@@ -89,7 +89,7 @@ def test_render_plots_from_payload():
         {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
     ]
     form = {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
-            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64"}
+            "nproc": 2, "use_gpu": False, "precision": "complex64"}
     payload, _ = compute_payload(form, lambda d, t: None)
     assert isinstance(render_spars(payload), go.Figure)
     assert isinstance(render_energy(payload, section=2, kind="heatmap",
@@ -107,7 +107,7 @@ def test_result_payload_survives_diskcache_roundtrip(tmp_path):
         {"kind": "cir", "r": 5.4, "l": 0.26, "N": 96, "er": "9.2", "sigma": "5.8e7"},
     ]
     form = {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
-            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64"}
+            "nproc": 2, "use_gpu": False, "precision": "complex64"}
     payload, err = compute_payload(form, lambda d, t: None)
     assert err is None
     # The background worker and the main process communicate ONLY through the
@@ -467,7 +467,7 @@ def _small_chain_form(compute):
         {"kind": "cir", "r": 5.4, "l": 0.26, "N": 24, "er": "9.2", "sigma": "5.8e7"},
     ]
     return {"rows": rows, "sym": True, "f_start": 28.0, "f_stop": 34.0, "f_n": 3,
-            "cm_nproc": 2, "sm_nproc": 2, "use_gpu": False, "precision": "complex64",
+            "nproc": 2, "use_gpu": False, "precision": "complex64",
             "compute": compute}
 
 

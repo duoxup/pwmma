@@ -107,18 +107,18 @@ def register_callbacks(app):
         Input("save-default", "n_clicks"),
         State("chain-store", "data"), State("sym", "value"),
         State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
-        State("cm-nproc", "value"), State("sm-nproc", "value"),
+        State("nproc", "value"),
         State("use-gpu", "value"), State("precision", "value"),
         State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
         State("compute-select", "value"),
         prevent_initial_call=True,
     )
-    def _save_default(n, rows, sym, f_start, f_stop, f_n, cm_nproc, sm_nproc,
+    def _save_default(n, rows, sym, f_start, f_stop, f_n, nproc,
                       use_gpu, precision, cache_enable, cache_dir, compute):
         defaults.save_defaults({
             "rows": rows, "sym": list(sym or []),
             "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
-            "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
+            "nproc": nproc,
             "use_gpu": list(use_gpu or []), "precision": precision,
             "compute": compute,
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
@@ -128,13 +128,12 @@ def register_callbacks(app):
     @app.callback(
         Output("config-summary", "children"),
         Input("use-gpu", "value"), Input("precision", "value"),
-        Input("cm-nproc", "value"), Input("sm-nproc", "value"),
+        Input("nproc", "value"),
     )
-    def _config_summary(use_gpu, precision, cm_nproc, sm_nproc):
+    def _config_summary(use_gpu, precision, nproc):
         device = "GPU" if use_gpu else "CPU"
-        cm = "—" if cm_nproc is None else cm_nproc
-        sm = "—" if sm_nproc is None else sm_nproc
-        return f"{device} · {precision or '—'} · {cm}/{sm} proc"
+        n = "—" if nproc is None else nproc
+        return f"{device} · {precision or '—'} · {n} BLAS threads"
 
     @app.callback(
         Output("prune-status", "children"),
@@ -238,9 +237,10 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         chain = adapter.parse_chain(form["rows"], form["sym"])
         freqs = adapter.parse_freqs(form["f_start"], form["f_stop"], form["f_n"])
         cfg = adapter.parse_config(
-            {"nproc": form["cm_nproc"], "cache_dir": form.get("cm_cache_dir"),
+            {"nproc": form["nproc"], "use_gpu": form["use_gpu"],
+             "precision": form["precision"],
+             "cache_dir": form.get("cm_cache_dir"),
              "cache_enabled": form.get("cm_cache_enabled")},
-            {"nproc": form["sm_nproc"], "use_gpu": form["use_gpu"], "precision": form["precision"]},
         )
     except adapter.GuiInputError as exc:
         return None, str(exc)
@@ -314,7 +314,7 @@ def register_run_callback(app):
         inputs=Input("run-button", "n_clicks"),
         state=[State("chain-store", "data"), State("sym", "value"),
                State("f-start", "value"), State("f-stop", "value"), State("f-n", "value"),
-               State("cm-nproc", "value"), State("sm-nproc", "value"),
+               State("nproc", "value"),
                State("use-gpu", "value"), State("precision", "value"),
                State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
                State("compute-select", "value")],
@@ -328,10 +328,10 @@ def register_run_callback(app):
         prevent_initial_call=True,
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
-             cm_nproc, sm_nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
+             nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
              compute):
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
-                "f_n": f_n, "cm_nproc": cm_nproc, "sm_nproc": sm_nproc,
+                "f_n": f_n, "nproc": nproc,
                 "use_gpu": bool(use_gpu), "precision": precision,
                 "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir,
                 "compute": compute}
