@@ -240,7 +240,7 @@ For research use when individual computation steps are needed:
 
 | Symbol | Description |
 |--------|-------------|
-| `calc_coupling_matrix(transition, pool, chunksize)` | Raw coupling matrix (no caching) |
+| `calc_coupling_matrix(transition, nproc=1)` | Raw coupling matrix (no caching) |
 | `calc_scattering_matrix(cm, z1, z2, ...)` | Single-junction scattering matrix |
 | `cascade_generalized_scattering_matrice(SA, SB, ...)` | Redheffer star product |
 | `apply_propagation_factors_to_smatrix(...)` | Shift S-matrix reference planes |
