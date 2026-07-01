@@ -24,7 +24,6 @@ class SMConfig:
     # heavy_computation core dropped multiprocessing, so this no longer sizes a
     # pool; it caps OpenBLAS so nproc=1 does not saturate every core.
     nproc: int = 8
-    chunksize: Union[int, Literal['auto']] = 'auto'
     use_gpu: bool = True
     use_double_precision: bool = False
     normalize: bool = True
