@@ -9,8 +9,6 @@ Created on Thu Jan 15 22:21:39 2026
 import logging
 
 import numpy as np
-from multiprocessing import Pool
-from threadpoolctl import threadpool_limits
 
 from .numerics.cm import calc_coupling_matrix
 from .inputs import Transition
@@ -62,15 +60,11 @@ def get_coupling_matrix(wgt: Transition,
             logger.info('Coupling matrix not found in cache, computing...')
             cm = None
     if cm is None:
-        nproc = config.nproc
-        if config.chunksize == 'auto':
-            chunksize = 64 if wgt.wg1.cross_tag != wgt.wg2.cross_tag else 8192
-        else:
-            chunksize = config.chunksize
-        # Cap BLAS to one thread while the pool is alive so the nproc forked
-        # workers inherit single-threaded linear algebra (total ~= nproc cores).
-        with threadpool_limits(limits=1), Pool(processes=nproc) as pool:
-            cm = calc_coupling_matrix(wgt_s2l, pool=pool, chunksize=chunksize)
+        # Vectorized, pool-free computation: the closed-form junctions vectorize
+        # over the mode grid; rec->cir falls back to a serial scalar loop.
+        # CMConfig.nproc / CMConfig.chunksize are inert (kept for now; removal is
+        # a deferred GUI-cleanup follow-up).
+        cm = calc_coupling_matrix(wgt_s2l)
         logger.debug('Coupling matrix computed, shape=%s', cm.shape)
         if config.cm_cache_dir is not None and config.save_cm_to_cache:
             save_coupling_matrix_to_cache(cm, wgt_s2l, config.cm_cache_dir)

@@ -7,9 +7,8 @@ Created on Thu Jan  8 20:07:29 2026
 """
 from __future__ import annotations
 
-from typing import Tuple, Optional, Union, Iterable
+from typing import Tuple, Union, Iterable
 import numpy as np
-from multiprocessing import Pool
 
 from ..inputs import Transition
 
@@ -273,19 +272,9 @@ def _results_to_matrix_auto_shape(
     X[ii, jj] = xx
     return X
 
-def _dispatcher_calc(func_wrapper,
-                     iterable: Iterable,
-                     *,
-                     pool: Optional[Pool] = None,
-                     chunksize: Optional[int]=1):
-    res = []
-    if pool:
-        for res_pool in pool.imap_unordered(func_wrapper, iterable, chunksize=chunksize):
-            res.append(res_pool)
-    else:
-        for args in iterable:
-            res.append(func_wrapper(args))
-    return res
+def _dispatcher_calc(func_wrapper, iterable: Iterable):
+    """Serial per-element evaluation (the scalar oracle path)."""
+    return [func_wrapper(args) for args in iterable]
 
 
 def _wrapper_selector(wgt: WGTransition):    #precondition wg1 < wg2
@@ -308,16 +297,60 @@ def _wrapper_selector(wgt: WGTransition):    #precondition wg1 < wg2
 
 
 
-#%% API
-def calc_coupling_matrix(wgt: WGTransition,
-                        *,
-                        pool: Optional[Pool] = None,
-                        chunksize: int=64):
+#%% Vectorized-path input + kernel registry
+def _mode_attr_arrays(wg):
+    """Per-mode attributes as parallel 1-D numpy arrays — the O(N) "extract
+    once" step for the vectorized path. Reads named attributes off
+    ``wg.mode_info_list`` (does not depend on ``mode_info_array`` column order).
+    """
+    mi = wg.mode_info_list
+    n = len(mi)
+    return {
+        "mode_type": np.fromiter((m.mode_type for m in mi), dtype=int, count=n),
+        "polar_dir": np.fromiter((m.polar_dir for m in mi), dtype=int, count=n),
+        "mode_num1": np.fromiter((m.mode_num1 for m in mi), dtype=int, count=n),
+        "mode_num2": np.fromiter((m.mode_num2 for m in mi), dtype=int, count=n),
+        "kc": np.fromiter((m.kc for m in mi), dtype=float, count=n),
+        "norm_constant": np.fromiter((m.norm_constant for m in mi), dtype=float, count=n),
+        "plus_dir": np.fromiter((m.plus_dir for m in mi), dtype=float, count=n),
+    }
 
-            
+
+# Junction family -> vectorized (N1, N2) real-block kernel. Populated as each
+# closed-form junction is vectorized; families absent here fall back to the
+# serial scalar oracle (currently ('rec', 'cir'): the deferred cm_rc quadrature).
+_VEC_KERNELS = {
+    # populated as each family is vectorized (cm_rr / cm_cc / cm_cr)
+}
+
+
+#%% API
+def _calc_coupling_matrix_scalar(wgt: WGTransition):
+    """Reference oracle: per-element scalar evaluation, serial (pool-free).
+
+    The pre-vectorization path, kept as the correctness oracle for the
+    vectorized kernels (see tests/test_cm_vectorized.py)."""
     func_wrapper = _wrapper_selector(wgt)
     iterable_args = _args_mixer(wgt).flatten()
-    
-    pool_res = _dispatcher_calc(func_wrapper, iterable_args, pool=pool, chunksize=chunksize)
-    cm = _results_to_matrix_auto_shape(pool_res, dtype=complex)
+    res = _dispatcher_calc(func_wrapper, iterable_args)
+    cm = _results_to_matrix_auto_shape(res, dtype=complex)
     return cm.real
+
+
+def _calc_coupling_matrix_vectorized(wgt: WGTransition):
+    wg1, wg2 = wgt.wg1, wgt.wg2
+    kernel = _VEC_KERNELS.get((wg1.cross_tag.lower(), wg2.cross_tag.lower()))
+    if kernel is None:
+        # Deferred family (rec->cir): serial scalar fallback, no pool.
+        return _calc_coupling_matrix_scalar(wgt)
+    m1 = _mode_attr_arrays(wg1)
+    m2 = _mode_attr_arrays(wg2)
+    return kernel(wg1, wg2, m1, m2)
+
+
+def calc_coupling_matrix(wgt: WGTransition):
+    """Coupling matrix over the smaller aperture (precondition wg1 < wg2).
+
+    Vectorized for the closed-form junctions (rec-rec, cir-cir, cir-rec); the
+    rec->cir quadrature junction falls back to the serial scalar path."""
+    return _calc_coupling_matrix_vectorized(wgt)
