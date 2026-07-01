@@ -170,6 +170,40 @@ def test_cm_cr_lommel_confluent_limit():
         np.testing.assert_allclose(vec, ref, **_PARITY)
 
 
+# ---- cm_rc : rec (small) -> cir (large) — route-A bilinear vectorization -----
+
+def test_cm_rc_vectorized_matches_scalar():
+    """The bilinear (batched-GEMM) cm_rc kernel must reproduce the scalar
+    oracle element-wise. Route A reorders the 1000-term azimuthal sum, so the
+    match is float-noise-level, not bit-identical: rtol for the well-conditioned
+    elements, a scale-relative atol floor for the near-resonant elements whose
+    quadrature sum cancels catastrophically (their absolute reorder noise stays
+    at machine level while the relative error is unbounded)."""
+    small = RecWG(a=0.381e-3, b=0.1905e-3, N=40)   # default-window cross-sections
+    large = CirWG(r=0.33e-3, N=120)
+    wgt = pwmma.Transition(small, large)
+    assert (wgt.wg1.cross_tag.lower(), wgt.wg2.cross_tag.lower()) == ("rec", "cir")
+
+    m1 = cm._mode_attr_arrays(wgt.wg1)
+    m2 = cm._mode_attr_arrays(wgt.wg2)
+    # all four (rec, cir) mode-type pairs present -> hh/he/eh/ee all exercised
+    assert {0, 1} <= set(m1["mode_type"].tolist())
+    assert {0, 1} <= set(m2["mode_type"].tolist())
+    # resonance crossings present: kc_cir*a > m*pi (m>0) means the azimuthal
+    # integrand sweeps across ImM's removable point for those elements — the
+    # hard (slow-converging) part of the quadrature is exercised, not skipped.
+    mm = m1["mode_num1"][:, None]
+    kc2 = m2["kc"][None, :]
+    assert np.any((mm > 0) & (kc2 * small.a > mm * np.pi))
+
+    vec = _vec(wgt)
+    ref = _scalar(wgt)
+    assert vec.shape == ref.shape
+    assert np.isfinite(vec).all()
+    scale = np.max(np.abs(ref))
+    np.testing.assert_allclose(vec, ref, rtol=1e-9, atol=1e-11 * scale)
+
+
 # ---- cm_rc fallback pool: nproc parallelizes but must not change results ------
 
 def test_cmconfig_nproc_does_not_change_results():

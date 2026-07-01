@@ -332,7 +332,7 @@ _VEC_KERNELS = {
     ('rec', 'rec'): cm_rr.block_vectorized,
     ('cir', 'cir'): cm_cc.block_vectorized,
     ('cir', 'rec'): cm_cr.block_vectorized,
-    # ('rec', 'cir') deferred: cm_rc quadrature -> serial scalar fallback
+    ('rec', 'cir'): cm_rc.block_vectorized,
 }
 
 
