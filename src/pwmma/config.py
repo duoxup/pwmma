@@ -12,9 +12,11 @@ from typing import Optional, Union, Literal
 
 @dataclass
 class CMConfig:
-    # Worker processes for the coupling-matrix pool. Only the un-vectorized
-    # rec->cir (cm_rc) junction still uses this pool; rec-rec / cir-cir / cir-rec
-    # are vectorized in-process and ignore nproc.
+    # Core budget for the coupling-matrix computation. All four junction
+    # families are vectorized in-process; nproc caps the BLAS threads of the
+    # rec->cir kernel's batched GEMMs (and would size the scalar-fallback pool
+    # if a vectorized kernel were ever deregistered). Interim semantics —
+    # final endgame (BLAS budget vs removal) pending review.
     nproc: int
     chunksize: Union[int, Literal['auto']] = 'auto'  # inert (computed internally)
     try_read_cm_from_cache: bool = False

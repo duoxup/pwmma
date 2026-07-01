@@ -9,6 +9,7 @@ Created on Thu Jan 15 22:21:39 2026
 import logging
 
 import numpy as np
+from threadpoolctl import threadpool_limits
 
 from .numerics.cm import calc_coupling_matrix
 from .inputs import Transition
@@ -60,12 +61,13 @@ def get_coupling_matrix(wgt: Transition,
             logger.info('Coupling matrix not found in cache, computing...')
             cm = None
     if cm is None:
-        # Closed-form junctions (rec-rec, cir-cir, cir-rec) vectorize over the
-        # mode grid, pool-free. The rec->cir quadrature junction falls back to
-        # the per-element scalar path, which CMConfig.nproc parallelizes over a
-        # process pool. (CMConfig.chunksize is inert; removal is a deferred
-        # GUI-cleanup follow-up.)
-        cm = calc_coupling_matrix(wgt_s2l, nproc=config.nproc)
+        # All four junction families are vectorized and run in-process; the
+        # rec->cir kernel's batched GEMMs go to BLAS, so cap its threads to
+        # ~nproc cores (interim semantics — final nproc endgame pending user
+        # review; the scalar pool branch remains only as a fallback should a
+        # kernel be deregistered). CMConfig.chunksize is inert.
+        with threadpool_limits(limits=config.nproc):
+            cm = calc_coupling_matrix(wgt_s2l, nproc=config.nproc)
         logger.debug('Coupling matrix computed, shape=%s', cm.shape)
         if config.cm_cache_dir is not None and config.save_cm_to_cache:
             save_coupling_matrix_to_cache(cm, wgt_s2l, config.cm_cache_dir)
