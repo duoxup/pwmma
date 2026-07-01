@@ -139,3 +139,86 @@ def eh_c(*args, **kwargs):
 
 def eh_s(*args, **kwargs):
     return 0.0
+
+
+# %% Vectorized kernel (production path; scalar hh/ee/he/eh above are the oracle)
+
+_I_POW_ARR = np.array([1.0, 1j, -1.0, -1j])
+
+
+def _ipow_vec(k):
+    """i**k for an integer array k (numpy modulo keeps negatives in range)."""
+    return _I_POW_ARR[k % 4]
+
+
+def _lommel_vec(q, kc_cir, kc_rect, R, cir_te):
+    """Vectorized _lommel over grids. The confluent (coincident-cutoff) limit is
+    selected with np.where after guarding the denominator so the general branch
+    never divides by zero."""
+    a_arg = kc_cir * R
+    b_arg = kc_rect * R
+    denom = kc_rect ** 2 - kc_cir ** 2
+    mask = np.abs(denom) < 1e-12 * np.maximum(kc_rect ** 2, 1.0)
+    safe = np.where(mask, 1.0, denom)
+    limit = (R ** 2 / 2.0) * (jvp(q, b_arg) ** 2
+                              + (1.0 - (q / b_arg) ** 2) * jv(q, b_arg) ** 2)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if cir_te:
+            general = -R * kc_rect * jv(q, a_arg) * jvp(q, b_arg) / safe
+        else:
+            general = R * kc_cir * jvp(q, a_arg) * jv(q, b_arg) / safe
+    return np.where(mask, limit, general)
+
+
+def block_vectorized(wg1, wg2, m1, m2):
+    """(N1, N2) real coupling block for a cir(small) -> rec(large) junction.
+
+    wg1 is the circle, wg2 the rectangle. Dispatch is on (mode_type_cir,
+    mode_type_rec): (TE,TE)->hh, (TM,TM)->ee, (TE,TM)->he, (TM,TE)->eh=0; the
+    circular mode's polar_dir selects the cos/sin angular sum.
+    """
+    R = wg1.r
+    a, b = wg2.a, wg2.b
+    q = m1["mode_num1"][:, None]
+    kc_cir = m1["kc"][:, None]
+    tc = m1["mode_type"][:, None]
+    pc = m1["polar_dir"][:, None]
+    mm = m2["mode_num1"][None, :]
+    nn = m2["mode_num2"][None, :]
+    kc_rect = m2["kc"][None, :]
+    tr = m2["mode_type"][None, :]
+    norm = (m1["plus_dir"] * m1["norm_constant"])[:, None] * m2["norm_constant"][None, :]
+
+    phi = np.arctan2(nn * np.pi / b, mm * np.pi / a)
+    cn = np.cos(nn * np.pi / 2)
+    sn = np.sin(nn * np.pi / 2)
+    ipm = _ipow_vec(mm)
+    ipmm = _ipow_vec(-mm)
+    sgnq = (-1.0) ** q
+    cosqphi = np.cos(q * phi)
+    sinqphi = np.sin(q * phi)
+    sig_cos_te = 2 * cn * cosqphi * (ipm + sgnq * ipmm)
+    sig_sin_te = 2j * sn * sinqphi * (ipm - sgnq * ipmm)
+    sig_cos_tm = 2j * sn * cosqphi * (ipm - sgnq * ipmm)
+    sig_sin_tm = 2 * cn * sinqphi * (ipm + sgnq * ipmm)
+
+    ipq = _ipow_vec(q)
+    lom_te = _lommel_vec(q, kc_cir, kc_rect, R, cir_te=True)
+    lom_tm = _lommel_vec(q, kc_cir, kc_rect, R, cir_te=False)
+
+    is_c = pc == 1
+    sig_te = np.where(is_c, sig_cos_te, sig_sin_te)
+    sig_tm = np.where(is_c, sig_cos_tm, sig_sin_tm)
+    he_sig = np.where(is_c, sig_sin_tm, -sig_cos_tm)
+
+    hh_block = kc_cir ** 2 * norm * (np.pi / 2) * ipq * lom_te * sig_te
+    ee_block = kc_rect ** 2 * norm * (-(np.pi / 2)) * ipq * lom_tm * sig_tm
+    pref = norm * q * jv(q, kc_cir * R) * (np.pi / 2) * ipq * jv(q, kc_rect * R)
+    he_block = pref * he_sig
+
+    out = np.zeros(np.broadcast_shapes(tc.shape, tr.shape), dtype=float)
+    out = np.where((tc == 1) & (tr == 1), hh_block.real, out)   # hh (TE, TE)
+    out = np.where((tc == 0) & (tr == 0), ee_block.real, out)   # ee (TM, TM)
+    out = np.where((tc == 1) & (tr == 0), he_block.real, out)   # he (TE, TM)
+    # (tc==0)&(tr==1) -> eh == 0, already zero
+    return out

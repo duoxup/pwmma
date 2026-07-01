@@ -130,3 +130,41 @@ def test_cm_cc_vectorized_matches_scalar_general_d_theta():
     ref = _cc_scalar_block(wgt.wg1, wgt.wg2, d, theta)
     assert np.isfinite(vec).all()
     np.testing.assert_allclose(vec, ref, **_PARITY)
+
+
+# ---- cm_cr : cir (small) -> rec (large) -------------------------------------
+
+def test_cm_cr_vectorized_matches_scalar():
+    small = CirWG(r=3.0e-3, N=32)
+    large = RecWG(a=10.0e-3, b=8.0e-3, N=36)
+    wgt = pwmma.Transition(small, large)     # cir smaller -> flag_csc == 1 -> cm_cr
+    assert (wgt.wg1.cross_tag.lower(), wgt.wg2.cross_tag.lower()) == ("cir", "rec")
+
+    vec = _vec(wgt)
+    ref = _scalar(wgt)
+    assert vec.shape == ref.shape
+    assert np.isfinite(vec).all()
+    np.testing.assert_allclose(vec, ref, **_PARITY)
+
+
+def test_cm_cr_lommel_confluent_limit():
+    """Directly exercise the vectorized _lommel confluent branch: an exact
+    kc_cir == kc_rect element must take the limit and match the scalar _lommel.
+    (A physical geometry can rarely hit the 1e-12 coincidence threshold, since
+    kc_cir comes from a Bessel-zero table and kc_rect from a2/b2 geometry.)"""
+    from pwmma.numerics import cm_cr
+
+    R = 3.0e-3
+    q = np.array([[1], [2]])                       # (2, 1)
+    kc_cir = np.array([[600.0], [850.0]])          # (2, 1)
+    kc_rect = np.array([[600.0, 720.0, 900.0]])    # (1, 3); [0,0] coincides
+    assert kc_rect[0, 0] == kc_cir[0, 0]           # exact coincidence present
+
+    for cir_te in (True, False):
+        vec = cm_cr._lommel_vec(q, kc_cir, kc_rect, R, cir_te=cir_te)
+        ref = np.array([[cm_cr._lommel(int(q[i, 0]), float(kc_cir[i, 0]),
+                                       float(kc_rect[0, j]), R, cir_te=cir_te)
+                         for j in range(kc_rect.shape[1])]
+                        for i in range(kc_cir.shape[0])])
+        assert np.isfinite(vec).all()
+        np.testing.assert_allclose(vec, ref, **_PARITY)

@@ -322,7 +322,8 @@ def _mode_attr_arrays(wg):
 _VEC_KERNELS = {
     ('rec', 'rec'): cm_rr.block_vectorized,
     ('cir', 'cir'): cm_cc.block_vectorized,
-    # cm_cr added as it is vectorized
+    ('cir', 'rec'): cm_cr.block_vectorized,
+    # ('rec', 'cir') deferred: cm_rc quadrature -> serial scalar fallback
 }
 
 
