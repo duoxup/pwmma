@@ -280,6 +280,39 @@ _I_POW = np.array([1.0, 1j, -1.0, -1j])   # exact i**k for integer arrays (k % 4
 _CHUNK_BYTES = 256 * 2**20
 
 
+def _im_tables(vals, M, expM):
+    """ImC and ImS tables for the integer orders ``vals`` over ``M``, reusing
+    ``expM = exp(-1j*M)`` (which is order-independent) and sharing the ImM core
+    between the C and S variants of each order. Formulas, branches and
+    tolerances are verbatim imc_vec / ims_vec / imm_vec_safe — per-point values
+    are identical to the scalar oracle's; this only removes recomputation.
+    Returns (imc_tab, ims_tab), each shaped (len(vals),) + M.shape, complex."""
+    imc = np.empty((len(vals),) + M.shape, dtype=complex)
+    ims = np.empty_like(imc)
+    for k, v in enumerate(int(v) for v in vals):
+        if v == 0:
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                c0 = 1j * M * ((expM - 1.0) / (M * M))
+            mask0 = np.isclose(M, 0.0, rtol=rtol_close, atol=atol_close)
+            c0[mask0] = 0.5
+            s0 = np.zeros(M.shape, dtype=complex)
+            s0[mask0] = -0.5j
+            imc[k], ims[k] = c0, s0
+            continue
+        mp = v * np.pi
+        sgn = -1.0 if (v % 2) else 1.0
+        denom = M * M - mp * mp
+        numer = sgn * expM - 1.0
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            imm = numer / denom
+        mask = np.isclose(np.abs(M), mp, rtol=rtol_close, atol=atol_close)
+        if np.any(mask):
+            imm[mask] = -1j / (2.0 * mp)
+        imc[k] = 1j * M * imm
+        ims[k] = mp * imm
+    return imc, ims
+
+
 def block_vectorized(wg1, wg2, m1, m2, n_quad=_N_QUAD):
     """(N1, N2) real coupling block for a rec(small) -> cir(large) junction.
 
@@ -344,11 +377,16 @@ def block_vectorized(wg1, wg2, m1, m2, n_quad=_N_QUAD):
         ang = np.where((pd_cir[js] == 1)[:, None], np.cos(lq), np.sin(lq))
         W = ang * phase_ * (a * b)                              # (jc, nq)
 
-        # ImC/ImS tables, (jc, n_vals, nq) — same evaluations as the oracle
-        Gc = np.stack([imc_vec(int(v), beta_a) for v in mvals], axis=1)
-        Gs = np.stack([ims_vec(int(v), beta_a) for v in mvals], axis=1)
-        Hc = np.stack([imc_vec(int(v), beta_b) for v in nvals], axis=1)
-        Hs = np.stack([ims_vec(int(v), beta_b) for v in nvals], axis=1)
+        # ImC/ImS tables — exp(-1j*beta) is order-independent, so evaluate it
+        # once per chunk and share it (and the ImM core) across all orders.
+        exp_a = np.exp(-1j * beta_a)
+        exp_b = np.exp(-1j * beta_b)
+        Gc, Gs = _im_tables(mvals, beta_a, exp_a)     # (n_m, jc, nq)
+        Hc, Hs = _im_tables(nvals, beta_b, exp_b)     # (n_n, jc, nq)
+        Gc = np.moveaxis(Gc, 0, 1)                    # -> (jc, n_m, nq) views
+        Gs = np.moveaxis(Gs, 0, 1)
+        Hc = np.moveaxis(Hc, 0, 1)
+        Hs = np.moveaxis(Hs, 0, 1)
 
         # batched bilinear reductions over l
         S_hh = (Gc * W[:, None, :]) @ Hc.swapaxes(1, 2)         # (jc, n_m, n_n)
