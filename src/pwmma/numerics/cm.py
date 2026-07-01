@@ -8,7 +8,9 @@ Created on Thu Jan  8 20:07:29 2026
 from __future__ import annotations
 
 from typing import Tuple, Union, Iterable
+from multiprocessing import Pool
 import numpy as np
+from threadpoolctl import threadpool_limits
 
 from ..inputs import Transition
 
@@ -272,8 +274,15 @@ def _results_to_matrix_auto_shape(
     X[ii, jj] = xx
     return X
 
-def _dispatcher_calc(func_wrapper, iterable: Iterable):
-    """Serial per-element evaluation (the scalar oracle path)."""
+def _dispatcher_calc(func_wrapper, iterable: Iterable, *, nproc: int = 1,
+                     chunksize: int = 64):
+    """Per-element evaluation. Serial when ``nproc <= 1``; otherwise a process
+    pool (BLAS capped to one thread so nproc forked workers stay single-threaded).
+    Only the scalar fallback (currently cm_rc, rec->cir) uses this; the vectorized
+    kernels run in-process."""
+    if nproc and nproc > 1:
+        with threadpool_limits(limits=1), Pool(processes=nproc) as pool:
+            return list(pool.imap_unordered(func_wrapper, iterable, chunksize=chunksize))
     return [func_wrapper(args) for args in iterable]
 
 
@@ -328,32 +337,33 @@ _VEC_KERNELS = {
 
 
 #%% API
-def _calc_coupling_matrix_scalar(wgt: WGTransition):
-    """Reference oracle: per-element scalar evaluation, serial (pool-free).
-
-    The pre-vectorization path, kept as the correctness oracle for the
-    vectorized kernels (see tests/test_cm_vectorized.py)."""
+def _calc_coupling_matrix_scalar(wgt: WGTransition, *, nproc: int = 1):
+    """Per-element scalar evaluation. Also the correctness oracle for the
+    vectorized kernels (see tests/test_cm_vectorized.py). ``nproc > 1`` runs the
+    per-element loop over a process pool (used by the cm_rc fallback)."""
     func_wrapper = _wrapper_selector(wgt)
     iterable_args = _args_mixer(wgt).flatten()
-    res = _dispatcher_calc(func_wrapper, iterable_args)
+    chunksize = 64 if wgt.wg1.cross_tag != wgt.wg2.cross_tag else 8192
+    res = _dispatcher_calc(func_wrapper, iterable_args, nproc=nproc, chunksize=chunksize)
     cm = _results_to_matrix_auto_shape(res, dtype=complex)
     return cm.real
 
 
-def _calc_coupling_matrix_vectorized(wgt: WGTransition):
+def _calc_coupling_matrix_vectorized(wgt: WGTransition, *, nproc: int = 1):
     wg1, wg2 = wgt.wg1, wgt.wg2
     kernel = _VEC_KERNELS.get((wg1.cross_tag.lower(), wg2.cross_tag.lower()))
     if kernel is None:
-        # Deferred family (rec->cir): serial scalar fallback, no pool.
-        return _calc_coupling_matrix_scalar(wgt)
+        # Deferred family (rec->cir): scalar fallback, parallelized over nproc.
+        return _calc_coupling_matrix_scalar(wgt, nproc=nproc)
     m1 = _mode_attr_arrays(wg1)
     m2 = _mode_attr_arrays(wg2)
-    return kernel(wg1, wg2, m1, m2)
+    return kernel(wg1, wg2, m1, m2)   # vectorized, in-process (nproc unused)
 
 
-def calc_coupling_matrix(wgt: WGTransition):
+def calc_coupling_matrix(wgt: WGTransition, *, nproc: int = 1):
     """Coupling matrix over the smaller aperture (precondition wg1 < wg2).
 
-    Vectorized for the closed-form junctions (rec-rec, cir-cir, cir-rec); the
-    rec->cir quadrature junction falls back to the serial scalar path."""
-    return _calc_coupling_matrix_vectorized(wgt)
+    Vectorized (pool-free) for the closed-form junctions (rec-rec, cir-cir,
+    cir-rec). The rec->cir quadrature junction falls back to the per-element
+    scalar path, which ``nproc`` parallelizes over a process pool."""
+    return _calc_coupling_matrix_vectorized(wgt, nproc=nproc)

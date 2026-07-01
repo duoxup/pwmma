@@ -12,8 +12,11 @@ from typing import Optional, Union, Literal
 
 @dataclass
 class CMConfig:
-    nproc: int  # number of worker processes for the coupling-matrix pool
-    chunksize: Union[int, Literal['auto']] = 'auto'
+    # Worker processes for the coupling-matrix pool. Only the un-vectorized
+    # rec->cir (cm_rc) junction still uses this pool; rec-rec / cir-cir / cir-rec
+    # are vectorized in-process and ignore nproc.
+    nproc: int
+    chunksize: Union[int, Literal['auto']] = 'auto'  # inert (computed internally)
     try_read_cm_from_cache: bool = False
     save_cm_to_cache: bool = False
     cm_cache_dir: Optional[str] = None  # must be set explicitly to enable caching

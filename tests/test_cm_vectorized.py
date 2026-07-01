@@ -170,14 +170,16 @@ def test_cm_cr_lommel_confluent_limit():
         np.testing.assert_allclose(vec, ref, **_PARITY)
 
 
-# ---- pool removal / inert config --------------------------------------------
+# ---- cm_rc fallback pool: nproc parallelizes but must not change results ------
 
-def test_cmconfig_nproc_is_inert():
-    """The computation is pool-free now; CMConfig.nproc must not affect results
-    (it is kept only as an inert field pending GUI cleanup)."""
+def test_cmconfig_nproc_does_not_change_results():
+    """rec->cir falls back to the per-element scalar path, which CMConfig.nproc
+    parallelizes over a process pool. The pool only reorders work, so serial
+    (nproc=1) and pooled (nproc>1) must give bit-identical coupling matrices."""
     small = RecWG(a=3.556e-3, b=1.778e-3, N=16)
     large = CirWG(r=4.2e-3, N=40)
     t = pwmma.Transition(small, large)
-    cm1 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=1))
-    cm7 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=7))
-    np.testing.assert_array_equal(cm1, cm7)
+    assert (t.wg1.cross_tag.lower(), t.wg2.cross_tag.lower()) == ("rec", "cir")  # fallback
+    cm1 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=1))   # serial
+    cm4 = pwmma.get_coupling_matrix(t, pwmma.CMConfig(nproc=4))   # pooled
+    np.testing.assert_array_equal(cm1, cm4)

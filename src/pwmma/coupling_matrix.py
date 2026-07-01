@@ -60,11 +60,12 @@ def get_coupling_matrix(wgt: Transition,
             logger.info('Coupling matrix not found in cache, computing...')
             cm = None
     if cm is None:
-        # Vectorized, pool-free computation: the closed-form junctions vectorize
-        # over the mode grid; rec->cir falls back to a serial scalar loop.
-        # CMConfig.nproc / CMConfig.chunksize are inert (kept for now; removal is
-        # a deferred GUI-cleanup follow-up).
-        cm = calc_coupling_matrix(wgt_s2l)
+        # Closed-form junctions (rec-rec, cir-cir, cir-rec) vectorize over the
+        # mode grid, pool-free. The rec->cir quadrature junction falls back to
+        # the per-element scalar path, which CMConfig.nproc parallelizes over a
+        # process pool. (CMConfig.chunksize is inert; removal is a deferred
+        # GUI-cleanup follow-up.)
+        cm = calc_coupling_matrix(wgt_s2l, nproc=config.nproc)
         logger.debug('Coupling matrix computed, shape=%s', cm.shape)
         if config.cm_cache_dir is not None and config.save_cm_to_cache:
             save_coupling_matrix_to_cache(cm, wgt_s2l, config.cm_cache_dir)
