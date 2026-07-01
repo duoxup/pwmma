@@ -320,7 +320,8 @@ def _mode_attr_arrays(wg):
 # closed-form junction is vectorized; families absent here fall back to the
 # serial scalar oracle (currently ('rec', 'cir'): the deferred cm_rc quadrature).
 _VEC_KERNELS = {
-    # populated as each family is vectorized (cm_rr / cm_cc / cm_cr)
+    ('rec', 'rec'): cm_rr.block_vectorized,
+    # cm_cc / cm_cr added as they are vectorized
 }
 
 
