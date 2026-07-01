@@ -11,13 +11,20 @@ from .analysis_plotting import (
     plot_section_energy_heatmap,
     save_figure,
 )
+from .config import Config
+from .coupling_matrix import get_coupling_matrix
+from .gpu import detect_gpu_availability
+from .inputs import Chain, Transition
+from .io.numpy import prune_coupling_matrix_cache
 from .main import calc_spars_of_wgchain
 from .solver import ChainSolver
-from .coupling_matrix import get_coupling_matrix
-from .io.numpy import prune_coupling_matrix_cache
-from .inputs import Chain, Transition
-from .config import Config
-from .gpu import detect_gpu_availability
+from .spar_model import (
+    SparModel,
+    adaptive_spar_model,
+    fit_spar_model,
+    minus_NdB_band,
+    uniform_spar_model,
+)
 
 # Library-level logger. By default does nothing (NullHandler).
 # Users can enable output by configuring the 'pwmma' logger, e.g.:
@@ -32,6 +39,12 @@ __all__ = [
     'analyze_energy_coupling',
     # Solver session (per-frequency core)
     'ChainSolver',
+    # Rational sweep (AAA/AFS)
+    'SparModel',
+    'fit_spar_model',
+    'uniform_spar_model',
+    'adaptive_spar_model',
+    'minus_NdB_band',
     'plot_section_energy_coupling',
     'plot_chain_energy_overview',
     'plot_section_energy_heatmap',

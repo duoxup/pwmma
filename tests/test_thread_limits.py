@@ -8,6 +8,16 @@ goes to OpenBLAS, which defaults to *all* cores. The result is that ``nproc=1``
 would still saturate the machine. ``nproc`` should instead mean "use about this
 many cores", so the sweep must run with the BLAS thread pool capped to
 ``config.nproc``.
+
+The sampled metric excludes the ``mkl`` pool: numpy's linear algebra (all the
+sweep math) runs on its bundled OpenBLAS, while the conda-scipy MKL runtime is
+touched only by the AAA fits in ``pwmma.spar_model`` — and once scipy's LAPACK
+has exercised it, its reported max-threads goes sticky and ignores
+``threadpool_limits`` (a conda-MKL/pip-scipy runtime-mixing quirk, not pwmma
+behavior; test_spar_model runs earlier in the same pytest process and triggers
+it). Excluding MKL keeps the regression this file pins — drop the
+``threadpool_limits`` wrap in the sweeps and OpenBLAS/OpenMP report all cores
+again — without flaking on the unrelated pool.
 """
 
 from __future__ import annotations
@@ -44,7 +54,8 @@ def test_serial_sweep_caps_blas_threads_to_nproc(monkeypatch) -> None:
 
     def spy(*args, **kwargs):
         sampled.setdefault(
-            "n", max((p["num_threads"] for p in threadpool_info()), default=0)
+            "n", max((p["num_threads"] for p in threadpool_info()
+                      if p["internal_api"] != "mkl"), default=0)
         )
         return real(*args, **kwargs)
 
@@ -77,7 +88,8 @@ def test_energy_sweep_caps_blas_threads_to_nproc(monkeypatch) -> None:
 
     def spy(*args, **kwargs):
         sampled.setdefault(
-            "n", max((p["num_threads"] for p in threadpool_info()), default=0)
+            "n", max((p["num_threads"] for p in threadpool_info()
+                      if p["internal_api"] != "mkl"), default=0)
         )
         return real(*args, **kwargs)
 

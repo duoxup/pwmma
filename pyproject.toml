@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [{ name = "duoxup" }]
 dependencies = [
   "numpy",
-  "scipy",
+  "scipy>=1.15",  # scipy.interpolate.AAA (pwmma.spar_model)
   "tqdm",
   "threadpoolctl",
   # waveguides is an internal/private package and not available on PyPI.
