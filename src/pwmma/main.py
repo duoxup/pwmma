@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from typing import Callable, Sequence, Tuple
 import numpy as np
-from multiprocessing import Pool
 from tqdm import tqdm
 from threadpoolctl import threadpool_limits
 
@@ -44,15 +43,13 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
     precision = 'complex128' if sm_config.use_double_precision else 'complex64'
     logger.info('Backend: %s | Precision: %s | Frequencies: %d | Waveguides: %d',
                 backend_name, precision, len(freqs), wgchain.n_wgs)
-    # Cap BLAS to one thread while the pool is alive so the nproc forked workers
-    # inherit single-threaded linear algebra (total ~= nproc cores, not
-    # nproc x all-cores).
-    with threadpool_limits(limits=1), Pool(processes=sm_config.nproc) as pool:
-        zarr_list = [cnp.asarray(hc.impedance_array(wg, freqs, \
-                     pool=pool, chunksize=2048), dtype=dtype) \
+    # heavy_computation is now vectorized and pool-free; cap BLAS to
+    # ``sm_config.nproc`` so this in-process sweep uses ~nproc cores instead of
+    # letting OpenBLAS saturate the machine.
+    with threadpool_limits(limits=sm_config.nproc):
+        zarr_list = [cnp.asarray(hc.impedance_array(wg, freqs), dtype=dtype)
                      for wg in wgchain.wgs]
-        ps_list = [cnp.asarray(hc.propagation_factor_array(wg, freqs, \
-                   pool=pool, chunksize=2048), dtype=dtype) \
+        ps_list = [cnp.asarray(hc.propagation_factor_array(wg, freqs), dtype=dtype)
                    for wg in wgchain.wgs]
             
     if cms is None:

@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """Thread-oversubscription regression tests.
 
-``SMConfig.nproc`` only sizes the multiprocessing pools; the per-frequency GSM
-cascade runs serially in the parent and its linear algebra goes to OpenBLAS,
-which defaults to *all* cores. The result is that ``nproc=(1, 1)`` still
-saturates the machine. ``nproc`` should instead mean "use about this many
-cores", so the serial sweep must run with the BLAS thread pool capped to
+``SMConfig.nproc`` is a BLAS-thread budget: the S-matrix sweep runs in-process
+(the vectorized ``heavy_computation`` core has no pool) and its linear algebra
+goes to OpenBLAS, which defaults to *all* cores. The result is that ``nproc=1``
+would still saturate the machine. ``nproc`` should instead mean "use about this
+many cores", so the sweep must run with the BLAS thread pool capped to
 ``sm_config.nproc``.
 """
 

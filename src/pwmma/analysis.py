@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from multiprocessing import Pool
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
@@ -17,6 +16,7 @@ from threadpoolctl import threadpool_limits
 
 import waveguides.heavy_computation as hc
 from waveguides import WG
+from waveguides.core import C_LIGHT
 
 from .config import Config
 from .coupling_matrix import get_coupling_matrix
@@ -483,7 +483,7 @@ def _propagating_mask(wg, freqs):
     whose propagation factor acquires a small nonzero imaginary part.
     """
     kc = np.array([mode.kc for mode in wg.mode_info_list], dtype=float)
-    fc = kc * hc.C_LIGHT / (2.0 * np.pi * np.sqrt(np.real(wg.er)))
+    fc = kc * C_LIGHT / (2.0 * np.pi * np.sqrt(np.real(wg.er)))
     return np.asarray(freqs, dtype=float)[:, None] > fc[None, :]
 
 
@@ -587,18 +587,16 @@ def analyze_energy_coupling(
         section_indices,
     )
 
-    # Cap BLAS to one thread while the pool is alive so the nproc forked workers
-    # inherit single-threaded linear algebra (total ~= nproc cores).
-    with threadpool_limits(limits=1), Pool(processes=sm_config.nproc) as pool:
+    # heavy_computation is now vectorized and pool-free; cap BLAS to
+    # ``sm_config.nproc`` so this in-process sweep uses ~nproc cores instead of
+    # letting OpenBLAS saturate the machine.
+    with threadpool_limits(limits=sm_config.nproc):
         zarr_list = [
-            cnp.asarray(hc.impedance_array(wg, freqs, pool=pool, chunksize=2048), dtype=dtype)
+            cnp.asarray(hc.impedance_array(wg, freqs), dtype=dtype)
             for wg in lossless_wgs
         ]
         ps_list = [
-            cnp.asarray(
-                hc.propagation_factor_array(wg, freqs, pool=pool, chunksize=2048),
-                dtype=dtype,
-            )
+            cnp.asarray(hc.propagation_factor_array(wg, freqs), dtype=dtype)
             for wg in lossless_wgs
         ]
 

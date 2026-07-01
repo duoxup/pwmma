@@ -12,7 +12,7 @@ from typing import Optional, Union, Literal
 
 @dataclass
 class CMConfig:
-    nproc: int
+    nproc: int  # number of worker processes for the coupling-matrix pool
     chunksize: Union[int, Literal['auto']] = 'auto'
     try_read_cm_from_cache: bool = False
     save_cm_to_cache: bool = False
@@ -20,6 +20,9 @@ class CMConfig:
 
 @dataclass
 class SMConfig:
+    # BLAS-thread budget for the (in-process, vectorized) S-matrix sweep. The
+    # heavy_computation core dropped multiprocessing, so this no longer sizes a
+    # pool; it caps OpenBLAS so nproc=1 does not saturate every core.
     nproc: int = 8
     chunksize: Union[int, Literal['auto']] = 'auto'
     use_gpu: bool = True
