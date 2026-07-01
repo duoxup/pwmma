@@ -21,7 +21,7 @@ from waveguides import CirWG
 
 import pwmma
 import pwmma.analysis as analysis_mod
-import pwmma.main as main_mod
+import pwmma.solver as solver_mod
 
 _HAS_THREAD_POOL = bool(threadpool_info())
 _MULTICORE = (os.cpu_count() or 1) >= 2
@@ -40,7 +40,7 @@ def test_serial_sweep_caps_blas_threads_to_nproc(monkeypatch) -> None:
     """
     nproc = 2
     sampled: dict[str, int] = {}
-    real = main_mod.calc_transition_scattering_matrix
+    real = solver_mod.calc_transition_scattering_matrix
 
     def spy(*args, **kwargs):
         sampled.setdefault(
@@ -48,7 +48,7 @@ def test_serial_sweep_caps_blas_threads_to_nproc(monkeypatch) -> None:
         )
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(main_mod, "calc_transition_scattering_matrix", spy)
+    monkeypatch.setattr(solver_mod, "calc_transition_scattering_matrix", spy)
 
     small = CirWG(r=3.0e-3, l=2e-3, N=12)
     large = CirWG(r=4.2e-3, l=2e-3, N=16)

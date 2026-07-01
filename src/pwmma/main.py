@@ -7,26 +7,15 @@ Created on Mon Feb  9 17:20:32 2026
 """
 from __future__ import annotations
 
-import logging
 from typing import Callable, Sequence, Tuple
+
 import numpy as np
-from tqdm import tqdm
-from threadpoolctl import threadpool_limits
 
-import waveguides.heavy_computation as hc
-
-from .inputs import Chain
 from .config import Config
-from .gpu import get_array_backend
-from .coupling_matrix import get_coupling_matrix
-from .utils import judge_cross_section_containment
-from .numerics.gsm import (calc_transition_scattering_matrix,
-                           apply_propagation_factors_to_smatrix,
-                           cascade_generalized_scattering_matrice)
+from .inputs import Chain
+from .solver import ChainSolver
 
-logger = logging.getLogger(__name__)
-    
-    
+
 #%% Main APIs
 def calc_spars_of_wgchain(wgchain: 'Chain',
                           freqs: Sequence[float],
@@ -35,79 +24,12 @@ def calc_spars_of_wgchain(wgchain: 'Chain',
                           progress_callback: Callable[[int, int], None] | None = None,
                           cms: Sequence[np.ndarray] | None = None,
                           ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    cnp = get_array_backend(config.use_gpu)
-    dtype = cnp.complex64 if not config.use_double_precision else cnp.complex128
+    """S-parameters of a chain over a frequency sweep.
 
-    backend_name = 'CuPy (GPU)' if cnp is not np else 'NumPy (CPU)'
-    precision = 'complex128' if config.use_double_precision else 'complex64'
-    logger.info('Backend: %s | Precision: %s | Frequencies: %d | Waveguides: %d',
-                backend_name, precision, len(freqs), wgchain.n_wgs)
-    # heavy_computation is now vectorized and pool-free; cap BLAS to
-    # ``config.nproc`` so this in-process sweep uses ~nproc cores instead of
-    # letting OpenBLAS saturate the machine.
-    with threadpool_limits(limits=config.nproc):
-        zarr_list = [cnp.asarray(hc.impedance_array(wg, freqs), dtype=dtype)
-                     for wg in wgchain.wgs]
-        ps_list = [cnp.asarray(hc.propagation_factor_array(wg, freqs), dtype=dtype)
-                   for wg in wgchain.wgs]
-            
-    if cms is None:
-        cms = [cnp.asarray(get_coupling_matrix(wgt, config), dtype=dtype)
-               for wgt in wgchain.transitions]
-    else:
-        cms = [cnp.asarray(c, dtype=dtype) for c in cms]
-
-    # A contraction (wg1 larger than wg2) needs orientation-aware assembly; the
-    # flag only depends on geometry, so classify each transition once.
-    is_contraction = [judge_cross_section_containment(wgt) == 2
-                      for wgt in wgchain.transitions]
-
-    st11 = []; st12 = []; st21 = []; st22 = []
-    # The cascade runs serially in this process; cap its BLAS to ~nproc cores so
-    # nproc=1 no longer saturates the machine (OpenBLAS otherwise uses them all).
-    with threadpool_limits(limits=config.nproc):
-        for idx_f, f in enumerate(tqdm(freqs, disable=not show_progress)):
-            counter = 0
-            SA = None
-            for idx_wgt, wgt in enumerate(wgchain.transitions):
-                cm = cms[idx_wgt]
-                zarr1 = zarr_list[idx_wgt][idx_f]
-                zarr2 = zarr_list[idx_wgt+1][idx_f]
-                s11, s12, s21, s22 = calc_transition_scattering_matrix(
-                    cm, zarr1, zarr2,
-                    is_contraction=is_contraction[idx_wgt],
-                    cnp=cnp, dtype=dtype, conjugate_output=True)
-                if counter == 0:
-                    SA = (s11, s12, s21, s22)
-                else:
-                    p_int = ps_list[idx_wgt][idx_f]
-                    SB = (s11, s12, s21, s22)
-                    SA = cascade_generalized_scattering_matrice(SA, SB, p_int=p_int, cnp=cnp)
-                counter += 1
-
-            if wgchain.sym:
-                p_int = ps_list[-1][idx_f]
-                p_l_r = ps_list[0][idx_f]
-                SA = cascade_generalized_scattering_matrice(SA, reversed(SA), p_int=p_int, cnp=cnp)
-                S = apply_propagation_factors_to_smatrix(SA[0], SA[1], SA[2], SA[3], p_l_r, p_l_r, cnp=cnp)
-            else:
-                p_l = ps_list[0][idx_f]
-                p_r = ps_list[-1][idx_f]
-                S = apply_propagation_factors_to_smatrix(SA[0], SA[1], SA[2], SA[3], p_l, p_r, cnp=cnp)
-
-            st11.append(S[0])
-            st12.append(S[1])
-            st21.append(S[2])
-            st22.append(S[3])
-
-            if progress_callback is not None:
-                progress_callback(idx_f + 1, len(freqs))
-
-    st11 = np.stack([x.get() for x in st11]) if cnp is not np else np.stack(st11)
-    st12 = np.stack([x.get() for x in st12]) if cnp is not np else np.stack(st12)
-    st21 = np.stack([x.get() for x in st21]) if cnp is not np else np.stack(st21)
-    st22 = np.stack([x.get() for x in st22]) if cnp is not np else np.stack(st22)
-    
-    return (st11, st12, st21, st22)
-            
-            
+    Sugar over ``ChainSolver(wgchain, config, cms=cms).sweep(...)`` — construct
+    a :class:`~pwmma.ChainSolver` directly when making repeated or
+    single-frequency calls (e.g. adaptive sweeps), so the frequency-independent
+    setup (coupling matrices, GPU upload) is paid once.
+    """
+    return ChainSolver(wgchain, config, cms=cms).sweep(
+        freqs, show_progress=show_progress, progress_callback=progress_callback)
