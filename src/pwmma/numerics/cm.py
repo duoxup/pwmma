@@ -321,7 +321,8 @@ def _mode_attr_arrays(wg):
 # serial scalar oracle (currently ('rec', 'cir'): the deferred cm_rc quadrature).
 _VEC_KERNELS = {
     ('rec', 'rec'): cm_rr.block_vectorized,
-    # cm_cc / cm_cr added as they are vectorized
+    ('cir', 'cir'): cm_cc.block_vectorized,
+    # cm_cr added as it is vectorized
 }
 
 
