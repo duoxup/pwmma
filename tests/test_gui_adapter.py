@@ -126,3 +126,48 @@ def test_compute_cms_disk_cache_roundtrip(tmp_path):
     assert cdir.exists() and any(cdir.iterdir())
     cms2 = A.compute_cms(chain, cfg)        # reads back from cache
     np.testing.assert_allclose(np.asarray(cms1[0]), np.asarray(cms2[0]))
+
+
+# ---- solver session + adaptive sweep helpers ----------------------------------
+
+def _small_chain():
+    import pwmma
+    return pwmma.Chain([RecWG(a=7.112e-3, b=3.556e-3, l=2e-3, N=10),
+                        CirWG(r=4.2e-3, l=1.5e-3, N=24)], sym=True)
+
+
+def _cpu_cfg():
+    import pwmma
+    return pwmma.Config(nproc=2, use_gpu=False)
+
+
+def test_run_spars_on_matches_run_spars():
+    chain, cfg = _small_chain(), _cpu_cfg()
+    freqs = np.linspace(28e9, 34e9, 3)
+    cms = A.compute_cms(chain, cfg)
+    solver = A.make_solver(chain, cfg, cms=cms)
+    via_solver = A.run_spars_on(solver, freqs)
+    via_legacy = A.run_spars(chain, freqs, cfg, cms=cms)
+    for k in ("s11", "s12", "s21", "s22"):
+        np.testing.assert_array_equal(via_solver[k], via_legacy[k])
+    np.testing.assert_array_equal(via_solver["freqs"], freqs)
+
+
+def test_run_adaptive_spars_shape_and_shared_samples():
+    solver = A.make_solver(_small_chain(), _cpu_cfg())
+    ticks = []
+    mp = A.run_adaptive_spars(solver, 28e9, 34e9,
+                              progress_callback=lambda k, f: ticks.append((k, f)))
+    assert set(mp) >= {"f0", "f1", "s11", "s21", "n_solves", "confident"}
+    F = mp["s11"]["F"]
+    # every sample was a true solve, each reported to the progress callback
+    assert mp["n_solves"] == len(ticks) == len(F)
+    assert np.isfinite(mp["s11"]["y"]).all()
+    assert np.isfinite(mp["s21"]["y"]).all()
+    np.testing.assert_array_equal(mp["s21"]["F"], F)
+    # S21 samples came from the SAME solved matrices (zero extra solves):
+    # spot-check both scalars against a direct solve at a sampled frequency
+    k = len(F) // 2
+    S = solver.smatrix_at(F[k])
+    assert np.isclose(mp["s11"]["y"][k], S[0][0, 0])
+    assert np.isclose(mp["s21"]["y"][k], S[2][0, 0])

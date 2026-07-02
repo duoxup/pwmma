@@ -415,28 +415,31 @@ def test_band_slice_restricts_frequency_range():
 def test_sweep_progress_reports_current_frequency():
     from pwmma.gui.callbacks import sweep_progress
 
-    text, value, vmax, led = sweep_progress(38, 122, 28.0, 34.0, 61)
+    text, value, vmax, led, info, bar = sweep_progress(38, 122, 28.0, 34.0, 61)
     assert (value, vmax) == ("38", "122")
     assert led == "led led-sweep"
-    assert "31.700 GHz" in text  # idx 37 of 28..34 GHz / 61 pts
+    assert text == "sweeping"                  # short fixed word (cell 1)
+    assert "31.700 GHz" in info                # dynamic detail in cell 3
+    assert bar == "eda-progress"
 
     # the S-parameter sweep (second half) wraps back to the sweep start
-    text2, *_ = sweep_progress(62, 122, 28.0, 34.0, 61)
-    assert "28.000 GHz" in text2
+    *_, info2, _bar = sweep_progress(62, 122, 28.0, 34.0, 61)
+    assert "28.000 GHz" in info2
 
 
 def test_sweep_progress_tolerates_bad_inputs():
     from pwmma.gui.callbacks import sweep_progress
 
-    text, value, vmax, led = sweep_progress(1, 2, None, None, None)
-    assert text.startswith("sweeping 1/2")
+    text, value, vmax, led, info, bar = sweep_progress(1, 2, None, None, None)
+    assert text == "sweeping"
+    assert info == "1/2"                       # falls back to the bare count
     assert led == "led led-sweep"
 
     # degenerate sweep sizes must not raise (modulo/slope guards)
-    text1, *_ = sweep_progress(1, 2, 28.0, 34.0, 1)
-    assert "28.000 GHz" in text1
-    text0, *_ = sweep_progress(1, 2, 28.0, 34.0, 0)
-    assert text0.startswith("sweeping 1/2")
+    *_, info1, _b1 = sweep_progress(1, 2, 28.0, 34.0, 1)
+    assert "28.000 GHz" in info1
+    *_, info0, _b0 = sweep_progress(1, 2, 28.0, 34.0, 0)
+    assert info0 == "1/2"
 
 
 def test_compute_selection_gates_which_sweeps_run():
@@ -544,3 +547,63 @@ def test_browser_opens_only_in_initial_process(monkeypatch):
 
     monkeypatch.setenv("WERKZEUG_RUN_MAIN", "true")  # reloader child
     assert _should_open_browser(no_browser=False) is False
+
+
+# ---- adaptive sweep line -------------------------------------------------------
+
+_ADAPTIVE_ROWS = [
+    {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 10, "er": "1", "sigma": "5.8e7"},
+    {"kind": "cir", "r": 4.2, "l": 1.5, "N": 24, "er": "1", "sigma": "5.8e7"},
+]
+
+
+def _adaptive_form(compute):
+    return {"rows": _ADAPTIVE_ROWS, "sym": True, "f_start": 28.0, "f_stop": 34.0,
+            "f_n": 3, "nproc": 2, "use_gpu": False, "precision": "complex64",
+            "compute": compute, "sweep": "adaptive"}
+
+
+def test_compute_payload_adaptive_spars_only():
+    from pwmma.gui.callbacks import compute_payload, render_spars
+    payload, err = compute_payload(_adaptive_form("spars"), lambda d, t: None)
+    assert err is None
+    assert payload["spars"] is None
+    mp = payload["spars_model"]
+    assert mp["n_solves"] == len(mp["s11"]["F"]) > 0
+    assert payload["sweep"] == "adaptive"
+    assert payload["n_in"] == payload["n_out"] == 1
+    import plotly.graph_objects as go
+    assert isinstance(render_spars(payload), go.Figure)
+
+
+def test_compute_payload_adaptive_energy_coerces_to_both():
+    import numpy as np
+
+    from pwmma.gui.callbacks import compute_payload
+    payload, err = compute_payload(_adaptive_form("energy"), lambda d, t: None)
+    assert err is None
+    # energy-only cannot drive the sampler -> coerced to both
+    assert payload["spars_model"] is not None
+    assert payload["result"] is not None
+    assert payload["compute"] == "both"
+    # energy ran on the adaptive sample grid (sorted)
+    sec = payload["result"].get_section(1)
+    np.testing.assert_array_equal(sec.freqs, np.sort(payload["spars_model"]["s11"]["F"]))
+
+
+def test_progress_helpers_six_fields():
+    from pwmma.gui.callbacks import adaptive_progress, sweep_progress
+    text, val, vmax, led, info, bar = sweep_progress(3, 6, 28.0, 34.0, 3)
+    assert text == "sweeping"                    # short fixed word (cell 1)
+    assert (val, vmax) == ("3", "6")
+    assert "GHz" in info and "3/6" in info       # dynamic detail moved to cell 3
+    assert bar == "eda-progress"
+    text, val, vmax, led, info, bar = adaptive_progress(7, 703.2e9)
+    assert text == "solving"
+    assert "7" in info and "703.2" in info
+    assert bar.endswith("dim")                   # greyed bar while total unknown
+
+
+def test_defaults_sweep_key():
+    from pwmma.gui.defaults import BUILTIN_DEFAULTS
+    assert BUILTIN_DEFAULTS.get("sweep") == "uniform"

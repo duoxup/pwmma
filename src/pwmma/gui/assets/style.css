@@ -237,7 +237,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   display: flex; align-items: center; gap: 8px;
 }
 .statusbar .cell.grow { flex: 1; border-right: none; justify-content: flex-end; }
+/* fixed-width status cell: the bar's position must not depend on the word */
+.statusbar .cell.cell-status { width: 96px; flex: none; }
 .statusbar .num { font-family: var(--font-num); }
+/* dynamic run detail sits left of the config summary in the grow cell */
+.statusbar .run-info { margin-right: auto; }
 
 /* LED */
 .led { width: 9px; height: 9px; display: inline-block; border: 1px solid #8a93a3; flex: none; }
@@ -261,6 +265,11 @@ progress.eda-progress::-webkit-progress-value {
 progress.eda-progress::-moz-progress-bar {
   background: repeating-linear-gradient(45deg, var(--accent-2), var(--accent-2) 6px, #3d83cf 6px, #3d83cf 12px);
 }
+/* adaptive solving phase: no meaningful total -> greyed, non-advancing bar */
+progress.eda-progress.dim { border-color: var(--border-med); background: #f0f1f4; }
+progress.eda-progress.dim::-webkit-progress-bar { background: #f0f1f4; }
+progress.eda-progress.dim::-webkit-progress-value { background: #f0f1f4; }
+progress.eda-progress.dim::-moz-progress-bar { background: #f0f1f4; }
 
 /* ---------- scrollbars ---------- */
 .chain-scroll::-webkit-scrollbar, .left-panel::-webkit-scrollbar,

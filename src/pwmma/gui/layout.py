@@ -46,6 +46,15 @@ def _toolbar(d: dict) -> html.Div:
                               {"label": "Mode analysis", "value": "energy"}],
                      value=d.get("compute", "both"), clearable=False,
                      className="dd-small"),
+        html.Span("sweep", className="lbl"),
+        # One sampling strategy for the WHOLE run (spars and energy share the
+        # grid): uniform = research line (f_n points, full S-matrix);
+        # adaptive = production line (AAA/AFS, fundamental mode, ~40 solves).
+        dcc.Dropdown(id="sweep-mode",
+                     options=[{"label": "uniform", "value": "uniform"},
+                              {"label": "adaptive (AAA)", "value": "adaptive"}],
+                     value=d.get("sweep", "uniform"), clearable=False,
+                     className="dd-small"),
     ], className="toolbar")
 
 
@@ -177,16 +186,19 @@ def _right_panel() -> html.Div:
 
 
 def _statusbar() -> html.Div:
+    # Three blocks: fixed-width status word + LED (so the bar never shifts),
+    # the bar itself, then the dynamic run info alongside the config summary.
     return html.Div([
         html.Div([
             html.Span(id="run-led", className="led led-idle"),
             html.Span("idle", id="run-status"),
-        ], className="cell"),
+        ], className="cell cell-status"),
         html.Div([
             html.Progress(id="run-progress", value="0", max="100",
                           className="eda-progress"),
         ], className="cell"),
         html.Div([
+            html.Span(id="run-info", className="num run-info"),
             html.Span(id="config-summary", className="num"),
         ], className="cell grow"),
     ], className="statusbar")

@@ -4,6 +4,8 @@ from __future__ import annotations
 import numpy as np
 import plotly.graph_objects as go
 
+from ..spar_model import fit_spar_model
+
 _METAL = "#b3c7e6"
 _DIELECTRIC = "#e6c9a8"
 _OUTLINE = "#1d5a9e"        # structure outline (accent steel blue)
@@ -120,6 +122,45 @@ def sparam_figure(spars: dict, *, out_modes=(0,), in_modes=(0,)) -> go.Figure:
                     db = np.where(np.isfinite(db), db, np.nan)
                     fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines",
                                              name=f"{label}[{i},{j}]"))
+    fig.update_layout(
+        autosize=True,
+        margin=dict(l=50, r=10, t=30, b=40),
+        xaxis_title="Frequency (GHz)",
+        yaxis_title="Magnitude (dB)",
+        legend=dict(orientation="h"),
+    )
+    return _theme(fig)
+
+
+def sparam_model_figure(model_payload: dict) -> go.Figure:
+    """Adaptive-sweep view: dense rational-model curves + true sample points.
+
+    The payload stores plain sample arrays (diskcache-small); the AAA model is
+    refit here on render (milliseconds). Sample markers show where the solver
+    actually ran — the honesty layer of an interpolated sweep.
+    """
+    fig = go.Figure()
+    dense = np.linspace(model_payload["f0"], model_payload["f1"], 2001)
+    for k, (key, label) in enumerate((("s11", "S11[0,0]"), ("s21", "S21[0,0]"))):
+        curve = model_payload.get(key)
+        if curve is None:
+            continue
+        F = np.asarray(curve["F"], dtype=float)
+        y = np.asarray(curve["y"], dtype=complex)
+        model = fit_spar_model(F, y)
+        with np.errstate(divide="ignore"):
+            db = 20.0 * np.log10(np.abs(model(dense)))
+            db_s = 20.0 * np.log10(np.abs(y))
+        db = np.where(np.isfinite(db), db, np.nan)      # -inf breaks autoscale
+        db_s = np.where(np.isfinite(db_s), db_s, np.nan)
+        color = _COLORWAY[k % len(_COLORWAY)]
+        fig.add_trace(go.Scatter(x=dense * 1e-9, y=db, mode="lines", name=label,
+                                 legendgroup=label, line=dict(color=color)))
+        fig.add_trace(go.Scatter(x=F * 1e-9, y=db_s, mode="markers",
+                                 name=f"{label} samples", legendgroup=label,
+                                 showlegend=False,
+                                 marker=dict(color=color, size=6,
+                                             symbol="circle-open")))
     fig.update_layout(
         autosize=True,
         margin=dict(l=50, r=10, t=30, b=40),

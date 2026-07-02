@@ -12,6 +12,8 @@ from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
 from ..io.numpy import prune_coupling_matrix_cache
 from ..main import calc_spars_of_wgchain
+from ..solver import ChainSolver
+from ..spar_model import adaptive_spar_model
 
 
 class GuiInputError(ValueError):
@@ -111,6 +113,63 @@ def run_spars(chain, freqs, config,
         chain, freqs, config, show_progress=False, progress_callback=progress_callback, cms=cms,
     )
     return {"freqs": np.asarray(freqs), "s11": s11, "s12": s12, "s21": s21, "s22": s22}
+
+
+def make_solver(chain, config, cms=None) -> ChainSolver:
+    """One prepared solver session per Run (CMs computed/uploaded once)."""
+    return ChainSolver(chain, config, cms=cms)
+
+
+def run_spars_on(solver, freqs,
+                 progress_callback: Callable[[int, int], None] | None = None) -> dict:
+    """Uniform sweep on an existing solver session; same dict as run_spars."""
+    s11, s12, s21, s22 = solver.sweep(np.asarray(freqs, dtype=float),
+                                      progress_callback=progress_callback)
+    return {"freqs": np.asarray(freqs), "s11": s11, "s12": s12, "s21": s21, "s22": s22}
+
+
+class _SolveRecorder:
+    """Forwards ``smatrix_at``, counting solves and keeping the fundamental-mode
+    scalars of every solved matrix.
+
+    ``adaptive_spar_model`` only ever sees this proxy: it drives the sampling
+    from S11[0,0], while S21[0,0] is captured here for free from the same
+    matrices (the teeth are chain resonances — poles are shared across all S
+    entries, so fitting S21 on the S11-chosen points is physically sound).
+    """
+
+    def __init__(self, solver, on_solve=None):
+        self._solver = solver
+        self._on_solve = on_solve
+        self.s21_at: dict[float, complex] = {}
+        self.count = 0
+
+    def smatrix_at(self, f):
+        S = self._solver.smatrix_at(f)
+        self.count += 1
+        self.s21_at[float(f)] = complex(S[2][0, 0])
+        if self._on_solve is not None:
+            self._on_solve(self.count, float(f))
+        return S
+
+
+def run_adaptive_spars(solver, f0, f1,
+                       progress_callback: Callable[[int, float], None] | None = None) -> dict:
+    """Adaptive fundamental-mode S-parameter samples (the production line).
+
+    Plain-numpy payload (diskcache-safe); the UI refits with fit_spar_model on
+    render (milliseconds). ``progress_callback(k, f)`` fires once per solve.
+    """
+    rec = _SolveRecorder(solver, on_solve=progress_callback)
+    model = adaptive_spar_model(rec, float(f0), float(f1))     # S11[0,0] drives
+    F = np.asarray(model.F, dtype=float)
+    return {
+        "f0": float(f0), "f1": float(f1),
+        "s11": {"F": F, "y": np.asarray(model.y, dtype=complex)},
+        "s21": {"F": F.copy(),
+                "y": np.array([rec.s21_at[float(f)] for f in F], dtype=complex)},
+        "n_solves": int(model.n_solves), "confident": bool(model.confident),
+    }
 
 
 def prune_cache(cache_dir: str, *, dry_run: bool = False) -> dict:

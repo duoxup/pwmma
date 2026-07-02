@@ -84,3 +84,27 @@ def test_energy_heatmap_figure_builds():
     fig = F.energy_heatmap_figure(_small_section(), max_modes=96)
     assert isinstance(fig, go.Figure)
     assert any(isinstance(t, go.Heatmap) for t in fig.data)
+
+
+def _fake_model_payload():
+    """Adaptive-sweep payload: samples of a smooth rational curve."""
+    F = np.linspace(600e9, 716e9, 12)
+    y11 = 0.3 * np.exp(1j * (F - 600e9) / 40e9) + 0.1
+    y21 = 0.9 - 0.2j * (F - 600e9) / 116e9
+    return {"f0": 600e9, "f1": 716e9,
+            "s11": {"F": F, "y": y11.astype(complex)},
+            "s21": {"F": F, "y": y21.astype(complex)},
+            "n_solves": 12, "confident": True}
+
+
+def test_sparam_model_figure_has_curves_and_sample_markers():
+    fig = F.sparam_model_figure(_fake_model_payload())
+    assert isinstance(fig, go.Figure)
+    lines = [t for t in fig.data if t.mode == "lines"]
+    markers = [t for t in fig.data if t.mode == "markers"]
+    assert {t.name for t in lines} == {"S11[0,0]", "S21[0,0]"}
+    assert len(markers) == 2                     # sample overlay per curve
+    assert len(lines[0].x) > 500                 # dense model evaluation
+    for t in fig.data:
+        y = np.asarray(t.y, dtype=float)
+        assert not np.isinf(y).any()             # -inf guard inherited

@@ -110,17 +110,17 @@ def register_callbacks(app):
         State("nproc", "value"),
         State("use-gpu", "value"), State("precision", "value"),
         State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
-        State("compute-select", "value"),
+        State("compute-select", "value"), State("sweep-mode", "value"),
         prevent_initial_call=True,
     )
     def _save_default(n, rows, sym, f_start, f_stop, f_n, nproc,
-                      use_gpu, precision, cache_enable, cache_dir, compute):
+                      use_gpu, precision, cache_enable, cache_dir, compute, sweep):
         defaults.save_defaults({
             "rows": rows, "sym": list(sym or []),
             "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
             "nproc": nproc,
             "use_gpu": list(use_gpu or []), "precision": precision,
-            "compute": compute,
+            "compute": compute, "sweep": sweep or "uniform",
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
         })
         return n
@@ -134,6 +134,24 @@ def register_callbacks(app):
         device = "GPU" if use_gpu else "CPU"
         n = "—" if nproc is None else nproc
         return f"{device} · {precision or '—'} · {n} BLAS threads"
+
+    @app.callback(
+        Output("compute-select", "options"),
+        Output("compute-select", "value"),
+        Input("sweep-mode", "value"),
+        State("compute-select", "value"),
+    )
+    def _sweep_compute_guard(sweep, compute):
+        # compute=energy + sweep=adaptive cannot exist: the S11 fit loop IS the
+        # sampler. Disable the option under adaptive and lift a stranded
+        # energy-only selection to Both (compute_payload coerces defensively too).
+        energy_off = sweep == "adaptive"
+        options = [{"label": "Both", "value": "both"},
+                   {"label": "S-parameters", "value": "spars"},
+                   {"label": "Mode analysis", "value": "energy",
+                    "disabled": energy_off}]
+        value = "both" if (energy_off and compute == "energy") else no_update
+        return options, value
 
     @app.callback(
         Output("prune-status", "children"),
@@ -171,21 +189,39 @@ def register_callbacks(app):
     )
 
 
+# Status-bar payloads are 6-tuples matching the background callback's progress
+# outputs: (status word, bar value, bar max, LED class, info text, bar class).
+# Cell 1 holds only the short fixed status word (its width never changes, so
+# the bar stops jumping); the dynamic detail lives in cell 3's info text.
+_BAR = "eda-progress"
+_BAR_DIM = "eda-progress dim"
+
+
 def sweep_progress(done, total, f_start, f_stop, f_n):
-    """Status-bar payload (text, bar value, bar max, LED class) for one sweep tick.
+    """Statusbar payload for one uniform-sweep tick.
 
     ``done`` counts 1..2n across the energy and S-parameter sweeps, so the
     displayed frequency runs through the sweep twice.
     """
-    text = f"sweeping {done}/{total}"
+    info = f"{done}/{total}"
     try:
         n = int(f_n)
         idx = (int(done) - 1) % n
         f = float(f_start) + idx * (float(f_stop) - float(f_start)) / max(n - 1, 1)
-        text += f" — {f:.3f} GHz"
+        info = f"{f:.3f} GHz ({done}/{total})"
     except (TypeError, ValueError, ZeroDivisionError):
         pass
-    return text, str(done), str(total), "led led-sweep"
+    return "sweeping", str(done), str(total), "led led-sweep", info, _BAR
+
+
+def adaptive_progress(k, f_hz):
+    """Statusbar payload for one adaptive solve: no meaningful total exists, so
+    the bar is greyed (dim) and the live detail goes to the info cell."""
+    try:
+        info = f"solve {int(k)} · {float(f_hz) / 1e9:.3f} GHz"
+    except (TypeError, ValueError):
+        info = f"solve {k}"
+    return "solving", "0", "1", "led led-sweep", info, _BAR_DIM
 
 
 def compute_selection(mode):
@@ -245,39 +281,70 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
     except adapter.GuiInputError as exc:
         return None, str(exc)
     compute = form.get("compute", "both")
+    sweep = form.get("sweep", "uniform")
+    if sweep == "adaptive" and compute == "energy":
+        # energy-only cannot drive the adaptive sampler (the S11 fit loop IS
+        # the sampler) — the UI prevents this combo; coerce stale saved state.
+        compute = "both"
     do_spars, do_energy = compute_selection(compute)
     try:
         n_phys = len(chain.wgs) + (len(chain.wgs) - 1 if chain.sym else 0)
         sections = list(range(1, n_phys - 1)) or None
-        n = len(freqs)
-        total = (int(do_spars) + int(do_energy)) * n  # sweeps share one progress bar
         if status_callback:
             status_callback("cm")
         cms = adapter.compute_cms(chain, cfg)
-        if status_callback:
-            status_callback("sweep")
-        done = 0
         result = None
         spars = None
-        if do_energy:
-            result = adapter.run_energy(
-                chain, freqs, cfg, sections=sections, cms=cms,
-                progress_callback=lambda d, _t: progress_callback(d, total))
-            done = n
-        if do_spars:
-            spars = adapter.run_spars(
-                chain, freqs, cfg, cms=cms,
-                progress_callback=lambda d, _t: progress_callback(done + d, total))
+        spars_model = None
+        if sweep == "adaptive":
+            # spars first — the adaptive loop produces the run's sample grid;
+            # energy then reuses that grid (one grid per run).
+            solver = adapter.make_solver(chain, cfg, cms=cms)
+            if status_callback:
+                status_callback("solving")
+            spars_model = adapter.run_adaptive_spars(
+                solver, freqs[0], freqs[-1], progress_callback=progress_callback)
+            if do_energy:
+                if status_callback:
+                    status_callback("sweep")
+                grid = np.sort(spars_model["s11"]["F"])
+                result = adapter.run_energy(
+                    chain, grid, cfg, sections=sections, cms=cms,
+                    progress_callback=lambda d, _t: progress_callback(d, len(grid)))
+        else:
+            solver = adapter.make_solver(chain, cfg, cms=cms) if do_spars else None
+            if status_callback:
+                status_callback("sweep")
+            n = len(freqs)
+            total = (int(do_spars) + int(do_energy)) * n  # sweeps share one bar
+            done = 0
+            if do_energy:
+                result = adapter.run_energy(
+                    chain, freqs, cfg, sections=sections, cms=cms,
+                    progress_callback=lambda d, _t: progress_callback(d, total))
+                done = n
+            if do_spars:
+                spars = adapter.run_spars_on(
+                    solver, freqs,
+                    progress_callback=lambda d, _t: progress_callback(done + d, total))
     except (NotImplementedError, ValueError) as exc:
         return None, f"computation failed: {exc}"
+    if spars is not None:
+        n_in = int(spars["s11"].shape[2])
+        n_out = int(max(spars["s11"].shape[1], spars["s21"].shape[1]))
+    elif spars_model is not None:
+        n_in = n_out = 1                       # fundamental-mode line
+    else:
+        n_in = n_out = 0
     return {
         "section_indices": list(result.section_indices) if result is not None else [],
-        "result": result, "spars": spars, "compute": compute,
+        "result": result, "spars": spars, "spars_model": spars_model,
+        "compute": compute, "sweep": sweep,
         # mode counts so the S-param panel can offer mode selectors without the
         # heavy arrays: n_in = excitation (port-1) modes, n_out = max over the
         # S11 (port-1) and S21 (port-2) response dimensions.
-        "n_in": int(spars["s11"].shape[2]) if spars is not None else 0,
-        "n_out": int(max(spars["s11"].shape[1], spars["s21"].shape[1])) if spars is not None else 0,
+        "n_in": n_in,
+        "n_out": n_out,
     }, None
 
 
@@ -317,48 +384,72 @@ def register_run_callback(app):
                State("nproc", "value"),
                State("use-gpu", "value"), State("precision", "value"),
                State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
-               State("compute-select", "value")],
+               State("compute-select", "value"), State("sweep-mode", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False),
                  (Output("stop-button", "disabled"), False, True)],
         cancel=[Input("stop-button", "n_clicks")],
         progress=[Output("run-status", "children"),
                   Output("run-progress", "value"), Output("run-progress", "max"),
-                  Output("run-led", "className")],
+                  Output("run-led", "className"),
+                  Output("run-info", "children"),
+                  Output("run-progress", "className")],
         prevent_initial_call=True,
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
              nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
-             compute):
+             compute, sweep):
+        sweep = sweep or "uniform"
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "nproc": nproc,
                 "use_gpu": bool(use_gpu), "precision": precision,
                 "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir,
-                "compute": compute}
+                "compute": compute, "sweep": sweep}
+        adaptive = sweep == "adaptive"
         n_sweeps = sum(compute_selection(compute))
-        bar_max = str(n_sweeps * int(f_n)) if f_n else "1"
+        bar_max = "1" if adaptive else (str(n_sweeps * int(f_n)) if f_n else "1")
+        phase_box = {"phase": "sweep"}    # compute_payload reports phase changes
 
         def status(phase):
+            phase_box["phase"] = phase
             if phase == "cm":
-                set_progress(("computing coupling matrices…", "0", bar_max, "led led-cm"))
+                set_progress(("cm", "0", bar_max, "led led-cm",
+                              "computing coupling matrices…", _BAR))
+            elif phase == "solving":
+                set_progress(("solving", "0", "1", "led led-sweep",
+                              "adaptive sampling…", _BAR_DIM))
             else:  # "sweep"
-                set_progress(("sweeping frequencies…", "0", bar_max, "led led-sweep"))
+                set_progress(("sweeping", "0", bar_max, "led led-sweep", "", _BAR))
 
         def progress(done, tot):
-            set_progress(sweep_progress(done, tot, f_start, f_stop, f_n))
+            if phase_box["phase"] == "solving":
+                set_progress(adaptive_progress(done, tot))   # tot carries f_hz
+            elif adaptive:
+                # energy phase of an adaptive run: known total, nonuniform grid
+                set_progress(("sweeping", str(done), str(tot), "led led-sweep",
+                              f"energy {done}/{tot}", _BAR))
+            else:
+                set_progress(sweep_progress(done, tot, f_start, f_stop, f_n))
 
         payload, error = compute_payload(form, progress, status_callback=status)
         if error is not None:
-            set_progress(("error — see message panel", "0", bar_max, "led led-error"))
+            set_progress(("error", "0", bar_max, "led led-error",
+                          "see message panel", _BAR))
             return None, error
         token = f"run-{n_clicks}"
         if not store_payload(app._pwmma_cache, token, payload):
-            set_progress(("error — see message panel", "0", bar_max, "led led-error"))
+            set_progress(("error", "0", bar_max, "led led-error",
+                          "see message panel", _BAR))
             return None, payload_too_large_message(payload, app._pwmma_cache)
-        set_progress(("done", bar_max, bar_max, "led led-done"))
+        message = ""
+        mp = payload.get("spars_model")
+        if mp is not None and not mp.get("confident", True):
+            message = ("warning: adaptive sweep did not converge within its solve "
+                       "budget — curves are best-effort (try a uniform run to verify)")
+        set_progress(("done", bar_max, bar_max, "led led-done", "", _BAR))
         return {"token": token, "section_indices": payload["section_indices"],
-                "compute": payload["compute"],
-                "n_in": payload["n_in"], "n_out": payload["n_out"]}, ""
+                "compute": payload["compute"], "sweep": payload["sweep"],
+                "n_in": payload["n_in"], "n_out": payload["n_out"]}, message
 
     # Stop kills the background job via `cancel` above; the job can no longer
     # report, so this regular callback resets the status-bar cells instead.
@@ -366,14 +457,18 @@ def register_run_callback(app):
         Output("run-status", "children", allow_duplicate=True),
         Output("run-progress", "value", allow_duplicate=True),
         Output("run-led", "className", allow_duplicate=True),
+        Output("run-info", "children", allow_duplicate=True),
+        Output("run-progress", "className", allow_duplicate=True),
         Input("stop-button", "n_clicks"),
         prevent_initial_call=True,
     )
     def _stopped(n):
-        return "stopped", "0", "led led-idle"
+        return "stopped", "0", "led led-idle", "", _BAR
 
 
 def render_spars(payload, out_modes=(0,), in_modes=(0,)):
+    if payload.get("spars_model") is not None:      # adaptive line: model view
+        return figures.sparam_model_figure(payload["spars_model"])
     if payload.get("spars") is None:
         return figures.empty_figure("S-parameters not computed for this run")
     return figures.sparam_figure(payload["spars"], out_modes=out_modes, in_modes=in_modes)
@@ -482,13 +577,17 @@ def register_plot_callbacks(app):
         return [{"label": str(i), "value": i} for i in idx], (idx[len(idx) // 2] if idx else None)
 
     @app.callback(Output("spars-out-modes", "options"), Output("spars-in-modes", "options"),
+                  Output("spars-out-modes", "disabled"), Output("spars-in-modes", "disabled"),
                   Input("result-store", "data"))
     def _spars_mode_options(data):
         # keep >= 1 option so the default [0] selection always stays valid
         n_out = max((data or {}).get("n_out", 0), 1)
         n_in = max((data or {}).get("n_in", 0), 1)
+        # adaptive runs model the fundamental-mode pair only
+        adaptive = (data or {}).get("sweep") == "adaptive"
         return ([{"label": str(i), "value": i} for i in range(n_out)],
-                [{"label": str(j), "value": j} for j in range(n_in)])
+                [{"label": str(j), "value": j} for j in range(n_in)],
+                adaptive, adaptive)
 
     @app.callback(Output("sparam-graph", "figure"),
                   Input("result-store", "data"),
