@@ -120,7 +120,7 @@ def register_callbacks(app):
             "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
             "nproc": nproc,
             "use_gpu": list(use_gpu or []), "precision": precision,
-            "compute": compute, "sweep": sweep or "uniform",
+            "compute": compute, "sweep": sweep_mode_value(sweep),
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
         })
         return n
@@ -138,20 +138,22 @@ def register_callbacks(app):
     @app.callback(
         Output("compute-select", "options"),
         Output("compute-select", "value"),
+        Output("f-n", "disabled"),
         Input("sweep-mode", "value"),
         State("compute-select", "value"),
     )
-    def _sweep_compute_guard(sweep, compute):
+    def _sweep_compute_guard(sweep_check, compute):
         # compute=energy + sweep=adaptive cannot exist: the S11 fit loop IS the
         # sampler. Disable the option under adaptive and lift a stranded
-        # energy-only selection to Both (compute_payload coerces defensively too).
-        energy_off = sweep == "adaptive"
+        # energy-only selection to Both (compute_payload coerces defensively
+        # too). "points" (f_n) is unused by adaptive -> grey it out as well.
+        energy_off = sweep_mode_value(sweep_check) == "adaptive"
         options = [{"label": "Both", "value": "both"},
                    {"label": "S-parameters", "value": "spars"},
                    {"label": "Mode analysis", "value": "energy",
                     "disabled": energy_off}]
         value = "both" if (energy_off and compute == "energy") else no_update
-        return options, value
+        return options, value, energy_off
 
     @app.callback(
         Output("prune-status", "children"),
@@ -212,6 +214,14 @@ def sweep_progress(done, total, f_start, f_stop, f_n):
     except (TypeError, ValueError, ZeroDivisionError):
         pass
     return "sweeping", str(done), str(total), "led led-sweep", info, _BAR
+
+
+def sweep_mode_value(checklist) -> str:
+    """Internal sweep string for the adaptive checkbox ('adaptive' iff ticked).
+
+    The form/payload/defaults keep the "uniform"/"adaptive" string so saved
+    state stays widget-agnostic."""
+    return "adaptive" if (checklist and "adaptive" in checklist) else "uniform"
 
 
 def adaptive_progress(k, f_hz):
@@ -399,7 +409,7 @@ def register_run_callback(app):
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
              nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
              compute, sweep):
-        sweep = sweep or "uniform"
+        sweep = sweep_mode_value(sweep)
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "nproc": nproc,
                 "use_gpu": bool(use_gpu), "precision": precision,

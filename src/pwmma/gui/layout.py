@@ -46,15 +46,6 @@ def _toolbar(d: dict) -> html.Div:
                               {"label": "Mode analysis", "value": "energy"}],
                      value=d.get("compute", "both"), clearable=False,
                      className="dd-small"),
-        html.Span("sweep", className="lbl"),
-        # One sampling strategy for the WHOLE run (spars and energy share the
-        # grid): uniform = research line (f_n points, full S-matrix);
-        # adaptive = production line (AAA/AFS, fundamental mode, ~40 solves).
-        dcc.Dropdown(id="sweep-mode",
-                     options=[{"label": "uniform", "value": "uniform"},
-                              {"label": "adaptive (AAA)", "value": "adaptive"}],
-                     value=d.get("sweep", "uniform"), clearable=False,
-                     className="dd-small"),
     ], className="toolbar")
 
 
@@ -114,7 +105,7 @@ def _left_panel(d: dict) -> html.Div:
         ], className="group"),
 
         html.Fieldset([
-            html.Legend("Frequency sweep"),
+            html.Legend("Frequency sampling"),
             html.Div([
                 _field("start", dcc.Input(id="f-start", type="number",
                                           value=d.get("f_start", 28.0),
@@ -126,7 +117,17 @@ def _left_panel(d: dict) -> html.Div:
                 html.Span("GHz ×", className="lbl range-dash"),
                 _field("points", dcc.Input(id="f-n", type="number",
                                            value=d.get("f_n", 61),
+                                           disabled=d.get("sweep") == "adaptive",
                                            className="num-input")),
+                # One sampling strategy for the WHOLE run (spars and energy
+                # share the grid). Checked = adaptive AAA/AFS production line
+                # (fundamental mode, ~40 solves; "points" is unused and greys
+                # out); unchecked = the uniform research line.
+                dcc.Checklist(
+                    id="sweep-mode",
+                    options=[{"label": " adaptive (AAA)", "value": "adaptive"}],
+                    value=["adaptive"] if d.get("sweep") == "adaptive" else [],
+                    className="inline-check"),
             ], className="row"),
         ], className="group"),
     ], className="left-panel")

@@ -607,3 +607,10 @@ def test_progress_helpers_six_fields():
 def test_defaults_sweep_key():
     from pwmma.gui.defaults import BUILTIN_DEFAULTS
     assert BUILTIN_DEFAULTS.get("sweep") == "uniform"
+
+
+def test_sweep_mode_value_maps_checklist_to_string():
+    from pwmma.gui.callbacks import sweep_mode_value
+    assert sweep_mode_value(["adaptive"]) == "adaptive"
+    assert sweep_mode_value([]) == "uniform"
+    assert sweep_mode_value(None) == "uniform"
