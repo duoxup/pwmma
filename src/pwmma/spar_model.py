@@ -74,6 +74,97 @@ class SparModel:
         order = np.argsort(self.F)
         return self.F[order], self.y[order]
 
+    @property
+    def support_points(self) -> np.ndarray:
+        """Barycentric support points (a subset of the fitted samples).
+
+        scipy's AAA stores them as complex; our abscissae are frequencies, so
+        the (identically zero) imaginary part is dropped.
+        """
+        return np.real(np.asarray(self._aaa.support_points)).astype(float)
+
+    @property
+    def weights(self) -> np.ndarray:
+        """Barycentric weights; together with the support points they fix the poles."""
+        return np.asarray(self._aaa.weights, dtype=complex)
+
+    def sibling_fit(self, F, y, *, curve=("s11", 0, 0)) -> "SparModel":
+        """Model another curve of the SAME structure, reusing this model's poles.
+
+        All response functions of one chain share its resonance poles; only the
+        residues differ. This keeps the parent's barycentric denominator
+        (support points + weights) fixed and solves just the numerator by
+        linear least squares over ALL of ``(F, y)`` — so the sibling cannot
+        grow poles absent from the parent: its failure mode is a missed
+        feature, never an invented one (unlike an independent AAA refit, which
+        can plant spurious pole pairs between sparse samples).
+
+        ``F`` is typically the parent's sample grid but may be any solved set.
+        The returned model reports ``n_solves=0`` (no new solver calls) and
+        inherits the parent's ``confident`` flag.
+        """
+        F = np.asarray(F, dtype=float)
+        y = np.asarray(y, dtype=complex)
+        if F.ndim != 1 or F.shape != y.shape:
+            raise ValueError(f"F and y must be 1-D and equal-length, got {F.shape} vs {y.shape}")
+        if not (np.isfinite(F).all() and np.isfinite(y).all()):
+            raise ValueError("non-finite values in the samples")
+
+        z = np.real(np.asarray(self._aaa.support_points)).astype(float)
+        w = np.asarray(self._aaa.weights, dtype=complex)
+        diff = F[:, None] - z[None, :]
+        on_support = diff == 0.0
+
+        # Unknowns are the sibling's support VALUES v_k (numerator = Σ wₖvₖ/(f−zₖ)).
+        # Off-support samples give Σₖ wₖvₖ/(Fⱼ−zₖ) = yⱼ·D(Fⱼ); a sample sitting
+        # on a support point pins vₖ = yⱼ directly (barycentric limit).
+        A = np.zeros((F.size, z.size), dtype=complex)
+        b = np.empty(F.size, dtype=complex)
+        off = ~on_support.any(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            C = w[None, :] / diff
+        A[off] = C[off]
+        b[off] = y[off] * C[off].sum(axis=1)
+        pin = ~off
+        A[pin, on_support[pin].argmax(axis=1)] = 1.0
+        b[pin] = y[pin]
+
+        scale = np.max(np.abs(A), axis=1)
+        scale[scale == 0.0] = 1.0
+        v, *_ = np.linalg.lstsq(A / scale[:, None], b / scale, rcond=None)
+
+        return SparModel(F, y, curve, _SiblingRational(self._aaa, v),
+                         n_solves=0, confident=self.confident)
+
+
+class _SiblingRational:
+    """Barycentric rational sharing a parent AAA's support points and weights.
+
+    Quacks like ``scipy.interpolate.AAA`` where SparModel needs it (``__call__``,
+    ``poles()``, ``support_points``/``weights``), so sibling models compose —
+    including ``sibling_fit`` chained off a sibling.
+    """
+
+    def __init__(self, parent, support_values):
+        self.support_points = np.real(np.asarray(parent.support_points)).astype(float)
+        self.weights = np.asarray(parent.weights, dtype=complex)
+        self.support_values = np.asarray(support_values, dtype=complex)
+        self._parent = parent
+
+    def __call__(self, f):
+        f = np.asarray(f, dtype=float)
+        ff = np.atleast_1d(f)
+        diff = ff[:, None] - self.support_points[None, :]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            C = 1.0 / diff
+            r = (C @ (self.weights * self.support_values)) / (C @ self.weights)
+        rows, cols = np.nonzero(diff == 0.0)
+        r[rows] = self.support_values[cols]
+        return r.reshape(f.shape)
+
+    def poles(self) -> np.ndarray:
+        return self._parent.poles()
+
 
 def fit_spar_model(F, y, *, max_terms=50, clean_up=True, rtol=None,
                    curve=("s11", 0, 0)) -> SparModel:

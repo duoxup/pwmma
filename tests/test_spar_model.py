@@ -39,6 +39,14 @@ class FakeSolver:
             y = y + (a * w) / (f - fc - 1j * w)
         return y
 
+    def s21(self, f):
+        """A sibling curve: exactly the same poles, different residues."""
+        f = np.asarray(f, dtype=complex)
+        y = 0.9 - 0.7e10 / (f - self.BG_POLE)
+        for (fc, w, _), a in zip(self.TEETH, (-0.25, 0.5, 0.15)):
+            y = y + (a * w) / (f - fc - 1j * w)
+        return y
+
     def true_poles(self):
         return np.array([fc + 1j * w for fc, w, _ in self.TEETH] + [self.BG_POLE])
 
@@ -138,3 +146,41 @@ def test_minus_ndb_band():
 def test_fit_rejects_nonfinite():
     with pytest.raises(ValueError):
         fit_spar_model(np.array([1.0, 2.0, np.nan]), np.array([1, 2, 3], dtype=complex))
+
+
+def test_sibling_fit_exact_grid_round_trip():
+    # Clean regime: parent fitted on a generous uniform grid; the sibling LS
+    # must recover the second exact-rational curve to fit-level accuracy.
+    solver = FakeSolver()
+    grid = np.linspace(F0, F1, 32)
+    parent = fit_spar_model(grid, solver.s11(grid))
+    sib = parent.sibling_fit(grid, solver.s21(grid))
+    dense = np.linspace(F0, F1, 3200)
+    assert np.max(np.abs(sib(dense) - solver.s21(dense))) < 1e-6
+    np.testing.assert_array_equal(sib.poles(), parent.poles())   # shared, exactly
+    assert sib.n_solves == 0
+    assert sib.confident
+
+
+def test_sibling_fit_on_adaptive_samples():
+    # Production shape: samples chosen by the ADAPTIVE loop for S11, sibling
+    # curve captured at the same points (the GUI's S21/a± path).
+    solver = FakeSolver()
+    parent = adaptive_spar_model(solver, F0, F1)
+    F_s, _ = parent.samples
+    sib = parent.sibling_fit(F_s, np.asarray(solver.s21(F_s)))
+    dense = np.linspace(F0, F1, 20001)
+    assert np.max(np.abs(sib(dense) - solver.s21(dense))) < 1e-2   # = parent tol
+    np.testing.assert_array_equal(sib.poles(), parent.poles())
+    # sibling interpolates/approximates its own samples, including support points
+    assert np.max(np.abs(sib(F_s) - solver.s21(F_s))) < 1e-6
+
+
+def test_sibling_fit_validates_input():
+    solver = FakeSolver()
+    grid = np.linspace(F0, F1, 32)
+    parent = fit_spar_model(grid, solver.s11(grid))
+    with pytest.raises(ValueError):
+        parent.sibling_fit(grid, np.ones(5, dtype=complex))
+    with pytest.raises(ValueError):
+        parent.sibling_fit(np.array([1.0, np.nan]), np.array([1, 2], dtype=complex))
