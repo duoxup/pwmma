@@ -226,18 +226,25 @@ def test_modal_analysis_applies_lossless_assumption() -> None:
 
 
 @pytest.fixture(scope="module")
-def smoothing_case():
-    """Dense truth vs sparse-grid analysis of the reduced Ka window.
-
-    The sparse grid is a strict subset of the dense one so the reconstruction
-    is compared at exactly the frequencies the sparse analysis never saw.
-    """
+def ka_small():
+    """Reduced-truncation Ka window chain with precomputed coupling matrices."""
     rwg = RecWG(a=7.112e-3, b=3.556e-3, l=2e-3, N=24)
     cwg = CirWG(r=4.2e-3, l=1.5e-3, N=64)
     dsk = CirWG(r=5.4e-3, l=0.26e-3, N=96, er=9.2)
     chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
     config = pwmma.Config(nproc=2, use_gpu=False, use_double_precision=True)
     cms = [pwmma.get_coupling_matrix(t, config) for t in chain.transitions]
+    return chain, config, cms
+
+
+@pytest.fixture(scope="module")
+def smoothing_case(ka_small):
+    """Dense truth vs sparse-grid analysis of the reduced Ka window.
+
+    The sparse grid is a strict subset of the dense one so the reconstruction
+    is compared at exactly the frequencies the sparse analysis never saw.
+    """
+    chain, config, cms = ka_small
     dense = np.linspace(28.0, 34.0, 121) * 1e9
     sparse = dense[::4]                                    # 31 points
     truth = pwmma.analyze_energy_coupling(
@@ -299,3 +306,42 @@ def test_smooth_section_energy_power_floor_and_errors(smoothing_case) -> None:
     stale = dataclasses.replace(sec, s11_complex=None)
     with pytest.raises(ValueError, match="s11_complex"):
         pwmma.smooth_section_energy(stale, dense)
+
+
+def test_cutoff_probe_frequencies_invariants(ka_small) -> None:
+    from waveguides.core import C_LIGHT
+
+    from pwmma.analysis import _build_physical_layout, _lossless_wg
+
+    chain, _, cms = ka_small
+    f0, f1 = 28e9, 34e9
+    spacing = (f1 - f0) / 2000.0
+
+    probes = pwmma.cutoff_probe_frequencies(chain, f0, f1)
+    assert probes.size > 0
+    assert np.all((probes > f0) & (probes < f1))
+    assert np.all(np.diff(probes) >= spacing * (1 - 1e-12))
+
+    # never AT a cutoff: solving there is singular (beta = 0)
+    cuts = []
+    for wg in _build_physical_layout(chain)[0]:
+        lw = _lossless_wg(wg)
+        kc = np.array([m.kc for m in lw.mode_info_list])
+        cuts.extend(kc * C_LIGHT / (2.0 * np.pi * np.sqrt(np.real(lw.er))))
+    gap = np.min(np.abs(probes[:, None] - np.asarray(cuts)[None, :]), axis=1)
+    assert gap.min() > 0.25 * spacing * (1 - 1e-12)
+
+    # reachability filter only drops symmetry-forbidden (numerically zero)
+    # families, so it reduces the set but never empties it
+    filtered = pwmma.cutoff_probe_frequencies(chain, f0, f1, cms=cms)
+    assert 0 < filtered.size <= probes.size
+
+
+def test_adaptive_seed_frequencies_exploration_floor(ka_small) -> None:
+    chain, _, cms = ka_small
+    f0, f1 = 28e9, 34e9
+    seeds = pwmma.adaptive_seed_frequencies(chain, f0, f1, cms=cms)
+    floor = np.linspace(f0, f1, 129)
+    assert np.all(np.isin(floor, seeds))          # uniform floor is present
+    assert np.all(np.diff(seeds) > 0)             # sorted, unique
+    assert seeds.size >= 129

@@ -7,6 +7,7 @@ import numpy as np
 from waveguides import WG, CirWG, RecWG
 
 from .. import analyze_energy_coupling
+from ..analysis import adaptive_seed_frequencies
 from ..config import Config
 from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
@@ -154,14 +155,28 @@ class _SolveRecorder:
 
 
 def run_adaptive_spars(solver, f0, f1,
-                       progress_callback: Callable[[int, float], None] | None = None) -> dict:
+                       progress_callback: Callable[[int, float], None] | None = None,
+                       cms=None) -> dict:
     """Adaptive fundamental-mode S-parameter samples (the production line).
 
     Plain-numpy payload (diskcache-safe); the UI refits with fit_spar_model on
     render (milliseconds). ``progress_callback(k, f)`` fires once per solve.
+
+    Seeds with ``adaptive_seed_frequencies`` (uniform exploration floor +
+    cutoff hotspot probes, reachability-filtered when ``cms`` is given): the
+    bare AFS loop can converge on a quiet S11 background before any sample
+    has felt a narrow tooth. ``max_solves`` gets headroom above the seed
+    count so refinement is never starved.
     """
     rec = _SolveRecorder(solver, on_solve=progress_callback)
-    model = adaptive_spar_model(rec, float(f0), float(f1))     # S11[0,0] drives
+    chain = getattr(solver, "chain", None)
+    seed = None
+    max_solves = 200
+    if chain is not None:
+        seed = adaptive_seed_frequencies(chain, float(f0), float(f1), cms=cms)
+        max_solves = len(seed) + 200
+    model = adaptive_spar_model(rec, float(f0), float(f1),     # S11[0,0] drives
+                                seed=seed, max_solves=max_solves)
     F = np.asarray(model.F, dtype=float)
     return {
         "f0": float(f0), "f1": float(f1),

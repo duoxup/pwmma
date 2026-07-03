@@ -805,6 +805,131 @@ def analyze_energy_coupling(
     )
 
 
+def cutoff_probe_frequencies(
+    chain: Chain,
+    f0: float,
+    f1: float,
+    *,
+    cms: Sequence[np.ndarray] | None = None,
+    excitation_mode: int = 0,
+    offsets: Sequence[float] = (1e-3, 3e-3, 6e-3, 12e-3),
+    reach_rtol: float = 1e-8,
+    min_spacing: float | None = None,
+) -> np.ndarray:
+    """Cutoff-hotspot probe frequencies for adaptive S-parameter sampling.
+
+    Just above an internal-section mode's cutoff the mode's group delay
+    diverges, so resonances (near-cutoff trapped modes, and Fabry-Perot
+    resonances of slowly-propagating modes) CLUSTER there. Probing a few
+    relative ``offsets`` above every relevant in-band cutoff densifies the
+    sampling in those hotspots. This is a heuristic densifier, NOT a
+    guarantee — resonances of well-propagating modes can sit anywhere in the
+    band; the exploration guarantee comes from the uniform floor that
+    :func:`adaptive_seed_frequencies` adds around these probes.
+
+    ``cms``: optional coupling matrices (one per base transition). When
+    given, section modes are filtered by a reachability bound — the |CM|
+    matrix-vector chain from the excited port mode. The reach distribution
+    is bimodal (coupled modes ~1e-2..1, symmetry-forbidden ones ~1e-17 =
+    numerical zeros, nothing in between), so the conservative default
+    ``reach_rtol=1e-8`` only drops modes that provably cannot couple — on a
+    heavily overmoded chain that is still most of them.
+
+    A probe exactly AT a cutoff is never emitted — beta = 0 makes the
+    junction assembly singular there (solving there returns non-finite
+    values). ``min_spacing`` (default ``(f1-f0)/2000``, the AFS
+    candidate-grid scale) deduplicates the probe set.
+    """
+    physical_wgs, transition_specs = _build_physical_layout(chain)
+    if min_spacing is None:
+        min_spacing = (f1 - f0) / 2000.0
+    max_off = max(offsets)
+
+    # reachability walk: |CM| matvecs from the excited port mode, renormalized
+    # per junction. A heuristic upper bound — orientation of a square CM is
+    # taken from the sym mirror flag; magnitudes only, no propagation physics.
+    reach_per_section: list[np.ndarray | None] = [None] * len(physical_wgs)
+    if cms is not None:
+        v = np.zeros(physical_wgs[0].N)
+        v[excitation_mode] = 1.0
+        for j, (base_idx, reverse_blocks) in enumerate(transition_specs):
+            M = np.abs(np.asarray(cms[base_idx]))
+            n_next = physical_wgs[j + 1].N
+            if M.shape == (n_next, v.size) and (M.shape[0] != M.shape[1] or not reverse_blocks):
+                v = M @ v
+            elif M.shape == (v.size, n_next):
+                v = M.T @ v
+            else:
+                raise ValueError(
+                    f"coupling matrix {base_idx} shape {M.shape} does not link "
+                    f"sections of size {v.size} and {n_next}")
+            v = v / max(v.max(), 1e-300)
+            reach_per_section[j + 1] = v
+
+    cutoffs_all: list[float] = []            # singularity-exclusion set
+    probes: list[float] = []
+    for idx, wg in enumerate(physical_wgs):
+        lw = _lossless_wg(wg)
+        kc = np.array([mode.kc for mode in lw.mode_info_list], dtype=float)
+        fc = kc * C_LIGHT / (2.0 * np.pi * np.sqrt(np.real(lw.er)))
+        in_reach = (fc > f0 * (1.0 - 2.0 * max_off)) & (fc < f1)
+        cutoffs_all.extend(fc[in_reach])
+        if idx == 0 or idx == len(physical_wgs) - 1:
+            continue                          # ports host no trapped modes
+        keep = in_reach
+        if reach_per_section[idx] is not None:
+            keep = keep & (reach_per_section[idx] > reach_rtol)
+        for f_c in fc[keep]:
+            probes.extend(f_c * (1.0 + np.asarray(offsets, dtype=float)))
+
+    if not probes:
+        return np.empty(0, dtype=float)
+    probes_arr = np.asarray(sorted(probes), dtype=float)
+    probes_arr = probes_arr[(probes_arr > f0) & (probes_arr < f1)]
+    if cutoffs_all:
+        near_cut = np.min(
+            np.abs(probes_arr[:, None] - np.asarray(cutoffs_all)[None, :]), axis=1)
+        probes_arr = probes_arr[near_cut > 0.25 * min_spacing]
+
+    kept: list[float] = []
+    for f in probes_arr:                      # greedy min-spacing dedupe
+        if not kept or f - kept[-1] >= min_spacing:
+            kept.append(float(f))
+    return np.asarray(kept, dtype=float)
+
+
+def adaptive_seed_frequencies(
+    chain: Chain,
+    f0: float,
+    f1: float,
+    *,
+    cms: Sequence[np.ndarray] | None = None,
+    n_uniform: int = 129,
+    **probe_kw,
+) -> np.ndarray:
+    """Production seed set for :func:`pwmma.adaptive_spar_model`.
+
+    The AFS stop rule measures model self-consistency, not truth: on a window
+    with a quiet S11 background the loop can converge before any sample has
+    come within a resonance's influence radius and silently miss it (observed
+    on the default Ka window: 8 solves, the only in-band tooth lost). Two
+    ingredients remove the luck, at the cost of a known floor of solves:
+
+    - a **uniform exploration floor** of ``n_uniform`` points. With spacing
+      ``d``, a tooth is reliably felt when its strength x width exceeds
+      ~``tol * d/2``; wall loss floors realistic tooth widths, so the default
+      129 catches every solidly-visible tooth of the validated window classes
+      (Ka doublet: caught with 2x margin at 129, and even at 65).
+    - :func:`cutoff_probe_frequencies` hotspot probes, densifying near
+      in-band cutoffs where resonances cluster.
+
+    Pass the result as ``seed=``; the validated AFS internals stay untouched
+    and refine whatever the seeds light up.
+    """
+    probes = cutoff_probe_frequencies(chain, f0, f1, cms=cms, **probe_kw)
+    return np.unique(np.concatenate([np.linspace(f0, f1, n_uniform), probes]))
+
+
 def smooth_section_energy(
     section: SectionEnergyCoupling,
     freqs_dense: Sequence[float],

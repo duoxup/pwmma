@@ -220,6 +220,14 @@ def adaptive_spar_model(solver, f0, f1, *,
     ``(F_prev, y_prev)`` of already-solved samples (zero re-solves; the loop
     only adds points the model is uncertain about). If ``max_solves`` is
     exhausted the model is returned anyway with ``confident=False``.
+
+    CAUTION: the stop rule measures self-consistency, not truth. On a chain
+    whose S11 background is quiet, the default 5-point seed can converge
+    before any sample has felt a narrow resonance and silently miss it. For
+    real waveguide chains, seed with
+    :func:`pwmma.adaptive_seed_frequencies` (uniform exploration floor +
+    cutoff hotspot probes); ``max_solves`` then needs headroom above the
+    seed count.
     """
     if n_checks < 1:
         raise ValueError(f"n_checks must be >= 1, got {n_checks}")

@@ -313,7 +313,8 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
             if status_callback:
                 status_callback("solving")
             spars_model = adapter.run_adaptive_spars(
-                solver, freqs[0], freqs[-1], progress_callback=progress_callback)
+                solver, freqs[0], freqs[-1], progress_callback=progress_callback,
+                cms=cms)
             if do_energy:
                 if status_callback:
                     status_callback("sweep")

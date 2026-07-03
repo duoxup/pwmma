@@ -3,7 +3,9 @@ import logging
 from .analysis import (
     ChainEnergyCouplingResult,
     SectionEnergyCoupling,
+    adaptive_seed_frequencies,
     analyze_energy_coupling,
+    cutoff_probe_frequencies,
     smooth_section_energy,
 )
 from .analysis_plotting import (
@@ -43,6 +45,8 @@ __all__ = [
     'ChainSolver',
     # Rational sweep (AAA/AFS)
     'SparModel',
+    'adaptive_seed_frequencies',
+    'cutoff_probe_frequencies',
     'fit_spar_model',
     'uniform_spar_model',
     'adaptive_spar_model',
