@@ -172,7 +172,7 @@ def sparam_model_figure(model_payload: dict) -> go.Figure:
 
 
 def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True,
-                       mode_ids=None) -> go.Figure:
+                       mode_ids=None, model=None) -> go.Figure:
     """Per-mode power for the dominant modes, plus totals.
 
     Each mode draws its propagating band solid and its cutoff (evanescent) band
@@ -182,6 +182,12 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
 
     ``mode_ids`` overrides the threshold-based dominant-mode selection (used by
     the GUI mode filters). The Σ totals always sum over all modes.
+
+    ``model`` (adaptive runs): a smooth_section_energy dict for this section.
+    Modes present in it draw their DENSE rebuilt curve plus open-circle
+    markers at the true sample points (the honesty layer, same visual language
+    as the S-parameter model view); modes it refused (``unsmoothed_mode_ids``)
+    and the Σ totals stay on the sampled grid.
     """
     freqs_ghz = section.freqs * 1e-9
     fig = go.Figure()
@@ -190,20 +196,37 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
     else:
         dominant = np.asarray(mode_ids, dtype=int)
     labels = section.get_mode_labels(mode_ids=dominant)
+    model_cols = ({int(m): k for k, m in enumerate(model["mode_ids"])}
+                  if model is not None else {})
     for i, (mode_id, label) in enumerate(zip(dominant, labels)):
         color = _COLORWAY[i % len(_COLORWAY)]
-        prop_mask = section.propagating_mask[:, mode_id]
-        evan_mask = section.evanescent_mask[:, mode_id]
+        col = model_cols.get(int(mode_id))
+        if col is not None:
+            x = model["freqs"] * 1e-9
+            power = model["modal_power"][:, col]
+            prop_mask = model["propagating_mask"][:, col]
+            evan_mask = model["evanescent_mask"][:, col]
+        else:
+            x = freqs_ghz
+            power = section.modal_power[:, mode_id]
+            prop_mask = section.propagating_mask[:, mode_id]
+            evan_mask = section.evanescent_mask[:, mode_id]
         if prop_mask.any():
-            y = np.where(prop_mask, section.modal_power[:, mode_id], np.nan)
-            fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines", name=label,
+            y = np.where(prop_mask, power, np.nan)
+            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=label,
                                      legendgroup=label, line=dict(color=color)))
         if evan_mask.any():
-            y = np.where(evan_mask, section.modal_power[:, mode_id], np.nan)
-            fig.add_trace(go.Scatter(x=freqs_ghz, y=y, mode="lines",
+            y = np.where(evan_mask, power, np.nan)
+            fig.add_trace(go.Scatter(x=x, y=y, mode="lines",
                                      name=f"{label} (evan.)", legendgroup=label,
                                      showlegend=not prop_mask.any(),
                                      line=dict(color=color, dash="dot")))
+        if col is not None:
+            fig.add_trace(go.Scatter(x=freqs_ghz, y=section.modal_power[:, mode_id],
+                                     mode="markers", name=f"{label} samples",
+                                     legendgroup=label, showlegend=False,
+                                     marker=dict(color=color, size=6,
+                                                 symbol="circle-open")))
     fig.add_trace(go.Scatter(x=freqs_ghz, y=section.total_propagating_power,
                              mode="lines", name="Σ prop.", line=dict(dash="dash", color="#1a1d21")))
     if section.evanescent_mask.any():

@@ -108,3 +108,28 @@ def test_sparam_model_figure_has_curves_and_sample_markers():
     for t in fig.data:
         y = np.asarray(t.y, dtype=float)
         assert not np.isinf(y).any()             # -inf guard inherited
+
+
+def test_energy_line_figure_with_model_draws_dense_and_markers():
+    sec = _small_section()
+    dominant = sec.dominant_mode_ids(threshold=0.04)
+    assert dominant.size >= 2
+    smooth_id, raw_id = int(dominant[0]), int(dominant[1])
+    n_dense = 50
+    model = {
+        "freqs": np.linspace(sec.freqs[0], sec.freqs[-1], n_dense),
+        "mode_ids": np.array([smooth_id]),
+        "modal_power": np.abs(np.random.default_rng(0).normal(0.5, 0.1, (n_dense, 1))),
+        "propagating_mask": np.ones((n_dense, 1), dtype=bool),
+        "evanescent_mask": np.zeros((n_dense, 1), dtype=bool),
+        "unsmoothed_mode_ids": np.array([raw_id]),
+    }
+    fig = F.energy_line_figure(sec, mode_ids=[smooth_id, raw_id], model=model)
+    by_name = {t.name: t for t in fig.data}
+    labels = sec.get_mode_labels(mode_ids=[smooth_id, raw_id])
+    dense_trace = by_name[labels[0]]
+    assert len(dense_trace.x) == n_dense                     # rebuilt dense curve
+    marker = by_name[f"{labels[0]} samples"]
+    assert marker.mode == "markers" and len(marker.x) == len(sec.freqs)
+    raw_trace = by_name[labels[1]]
+    assert len(raw_trace.x) == len(sec.freqs)                # refused -> sampled

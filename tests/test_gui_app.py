@@ -614,3 +614,41 @@ def test_sweep_mode_value_maps_checklist_to_string():
     assert sweep_mode_value(["adaptive"]) == "adaptive"
     assert sweep_mode_value([]) == "uniform"
     assert sweep_mode_value(None) == "uniform"
+
+
+def test_compute_payload_adaptive_builds_energy_model_and_renders_dense():
+    import numpy as np
+    import plotly.graph_objects as go
+
+    from pwmma.gui.callbacks import compute_payload, render_energy
+
+    payload, err = compute_payload(_adaptive_form("both"), lambda d, t: None)
+    assert err is None
+    em = payload["energy_model"]
+    assert em is not None
+    assert set(em) == set(payload["section_indices"])
+    sec_idx = payload["section_indices"][0]
+    m = em[sec_idx]
+    assert m["freqs"].shape == (2001,)
+    assert m["modal_power"].shape == (2001, m["mode_ids"].size)
+    assert m["mode_ids"].size > 0                  # dominant modes got curves
+
+    fig = render_energy(payload, section=sec_idx, kind="line",
+                        threshold=0.04, db=True)
+    assert isinstance(fig, go.Figure)
+    assert any(len(np.asarray(t.x)) == 2001 for t in fig.data)      # dense curve
+    assert any(t.mode == "markers" for t in fig.data)               # sample dots
+
+    # band filter slices the dense grid too
+    fig_band = render_energy(payload, section=sec_idx, kind="line",
+                             threshold=0.04, db=True, f_lo=29.0, f_hi=31.0)
+    dense_lens = [len(np.asarray(t.x)) for t in fig_band.data
+                  if t.mode != "markers"]
+    assert all(length < 2001 for length in dense_lens)
+
+
+def test_compute_payload_uniform_has_no_energy_model():
+    from pwmma.gui.callbacks import compute_payload
+    payload, err = compute_payload(_small_chain_form("energy"), lambda d, t: None)
+    assert err is None
+    assert payload["energy_model"] is None

@@ -306,6 +306,7 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         result = None
         spars = None
         spars_model = None
+        energy_model = None
         if sweep == "adaptive":
             # spars first — the adaptive loop produces the run's sample grid;
             # energy then reuses that grid (one grid per run).
@@ -322,6 +323,11 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
                 result = adapter.run_energy(
                     chain, grid, cfg, sections=sections, cms=cms,
                     progress_callback=lambda d, _t: progress_callback(d, len(grid)))
+                # dense smoothed per-mode curves (post-processing, no solves);
+                # reuse the "solving" phase word while the fits run
+                if status_callback:
+                    status_callback("solving")
+                energy_model = adapter.run_energy_model(result, freqs[0], freqs[-1])
         else:
             solver = adapter.make_solver(chain, cfg, cms=cms) if do_spars else None
             if status_callback:
@@ -350,6 +356,7 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
     return {
         "section_indices": list(result.section_indices) if result is not None else [],
         "result": result, "spars": spars, "spars_model": spars_model,
+        "energy_model": energy_model,
         "compute": compute, "sweep": sweep,
         # mode counts so the S-param panel can offer mode selectors without the
         # heavy arrays: n_in = excitation (port-1) modes, n_out = max over the
@@ -533,8 +540,29 @@ def band_slice(section, f_lo, f_hi):
     per_freq = ["freqs", "modal_power", "propagating_mask", "evanescent_mask",
                 "forward_left", "backward_left", "forward_right", "backward_right",
                 "reflection_power", "total_reflected_power", "transmission_power",
-                "power_balance"]
-    return dataclasses.replace(section, **{f: getattr(section, f)[keep] for f in per_freq})
+                "power_balance", "s11_complex"]
+    return dataclasses.replace(section, **{
+        f: getattr(section, f)[keep] for f in per_freq
+        if getattr(section, f) is not None})
+
+
+def energy_model_slice(model, f_lo, f_hi):
+    """Band-restrict a smooth_section_energy dict (GHz bounds; None = unbounded)."""
+    if model is None or (f_lo is None and f_hi is None):
+        return model
+    keep = np.ones(len(model["freqs"]), dtype=bool)
+    if f_lo is not None:
+        keep &= model["freqs"] >= float(f_lo) * 1e9
+    if f_hi is not None:
+        keep &= model["freqs"] <= float(f_hi) * 1e9
+    if not keep.any():
+        return None
+    if keep.all():
+        return model
+    out = dict(model)
+    for key in ("freqs", "modal_power", "propagating_mask", "evanescent_mask"):
+        out[key] = model[key][keep]
+    return out
 
 
 def render_energy(payload, *, section, kind, threshold, db,
@@ -549,8 +577,17 @@ def render_energy(payload, *, section, kind, threshold, db,
         return figures.energy_heatmap_figure(
             sec, mode_mask=None if allowed.all() else allowed)
     dominant = sec.dominant_mode_ids(threshold=float(threshold))
+    model = energy_model_slice(
+        (payload.get("energy_model") or {}).get(int(section)), f_lo, f_hi)
+    if model is not None:
+        # threshold the dense curves for smoothed modes (teeth between samples
+        # count); modes the model does not carry stay sampled-threshold based
+        smooth_ids = model["mode_ids"][
+            np.max(np.abs(model["modal_power"]), axis=0) > float(threshold)]
+        extra = dominant[~np.isin(dominant, model["mode_ids"])]
+        dominant = np.union1d(smooth_ids, extra).astype(int)
     return figures.energy_line_figure(
-        sec, dB=bool(db), mode_ids=dominant[allowed[dominant]])
+        sec, dB=bool(db), mode_ids=dominant[allowed[dominant]], model=model)
 
 
 def tab_visibility(tab):

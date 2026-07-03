@@ -7,7 +7,7 @@ import numpy as np
 from waveguides import WG, CirWG, RecWG
 
 from .. import analyze_energy_coupling
-from ..analysis import adaptive_seed_frequencies
+from ..analysis import adaptive_seed_frequencies, smooth_section_energy
 from ..config import Config
 from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
@@ -185,6 +185,20 @@ def run_adaptive_spars(solver, f0, f1,
                 "y": np.array([rec.s21_at[float(f)] for f in F], dtype=complex)},
         "n_solves": int(model.n_solves), "confident": bool(model.confident),
     }
+
+
+def run_energy_model(result, f0, f1, n_dense: int = 2001) -> dict:
+    """Dense smoothed per-mode energy curves for an adaptive run, per section.
+
+    Post-processing only (zero extra solves): shared-pole sibling fits of the
+    modal coefficients off each section's lossless s11_complex samples, with
+    the analytic factors rebuilt exactly on the dense grid. Modes the
+    shared-pole basis cannot represent land in ``unsmoothed_mode_ids`` and are
+    drawn from their samples by the figure layer. Plain-numpy, ~1 MB payload.
+    """
+    dense = np.linspace(float(f0), float(f1), int(n_dense))
+    return {int(idx): smooth_section_energy(result.get_section(idx), dense)
+            for idx in result.section_indices}
 
 
 def prune_cache(cache_dir: str, *, dry_run: bool = False) -> dict:
