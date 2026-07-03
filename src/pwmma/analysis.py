@@ -22,6 +22,7 @@ from .config import Config
 from .coupling_matrix import get_coupling_matrix
 from .gpu import get_array_backend
 from .inputs import Chain
+from .spar_model import SparModel, fit_spar_model
 from .utils import judge_cross_section_containment
 from .numerics.gsm import (
     apply_propagation_factors_to_smatrix,
@@ -71,6 +72,11 @@ class SectionEnergyCoupling:
     transmission_power:
         Transmitted power of the excitation mode at the chain output plane:
         ``|S21[e, e]|²`` where ``e = excitation_mode``.
+    s11_complex:
+        Complex ``S11[e, e]`` of the (lossless) analysis chain at each frequency.
+        Unlike the main lossy S-parameter sweep, this shares its resonance poles
+        with the recovered modal coefficients exactly, which is what
+        :func:`smooth_section_energy` needs for its shared-pole fits.
     power_balance:
         ``total_reflected_power + sum(modal_power, axis=1)`` for this section.
         Equals 1 (within numerical precision) for a lossless structure.
@@ -93,6 +99,7 @@ class SectionEnergyCoupling:
     total_reflected_power: np.ndarray
     transmission_power: np.ndarray
     power_balance: np.ndarray
+    s11_complex: np.ndarray = field(default=None)
     excitation_mode: int = 0
     wg: WG | None = field(default=None, repr=False, compare=False)
 
@@ -176,6 +183,8 @@ class SectionEnergyCoupling:
             "total_reflected_power": self.total_reflected_power.copy(),
             "transmission_power": self.transmission_power.copy(),
             "power_balance": self.power_balance.copy(),
+            "s11_complex": (self.s11_complex.copy() if self.s11_complex is not None
+                            else np.full(self.reflection_power.shape, np.nan, dtype=complex)),
             "excitation_mode": self.excitation_mode,
         }
 
@@ -220,6 +229,11 @@ class SectionEnergyCoupling:
                              np.full_like(data["reflection_power"], np.nan))
                 ),
                 power_balance=np.asarray(data["power_balance"]),
+                s11_complex=np.asarray(
+                    data.get("s11_complex",
+                             np.full(data["reflection_power"].shape, np.nan)),
+                    dtype=complex,
+                ),
                 excitation_mode=int(data["excitation_mode"]),
                 wg=wg,
             )
@@ -284,8 +298,12 @@ class ChainEnergyCouplingResult:
             "reflection_power": np.asarray(first_section.reflection_power),
             "total_reflected_power": np.asarray(first_section.total_reflected_power),
             "transmission_power": np.asarray(first_section.transmission_power),
+            "s11_complex": np.asarray(
+                first_section.s11_complex if first_section.s11_complex is not None
+                else np.full(first_section.reflection_power.shape, np.nan, dtype=complex)),
         }
-        _skip_keys = frozenset({"reflection_power", "total_reflected_power", "transmission_power"})
+        _skip_keys = frozenset({"reflection_power", "total_reflected_power",
+                                "transmission_power", "s11_complex"})
         for section_idx, section in self.sections.items():
             prefix = f"section_{section_idx}_"
             for key, value in section.to_dict().items():
@@ -324,10 +342,14 @@ class ChainEnergyCouplingResult:
                 total_refl_global = np.asarray(data["total_reflected_power"])
                 trans_global = np.asarray(data.get("transmission_power",
                                            np.full_like(refl_global, np.nan)))
+                s11c_global = np.asarray(
+                    data.get("s11_complex", np.full(refl_global.shape, np.nan)),
+                    dtype=complex)
             else:
                 refl_global = None
                 total_refl_global = None
                 trans_global = None
+                s11c_global = None
 
             sections = {}
             for section_idx in section_indices:
@@ -336,6 +358,7 @@ class ChainEnergyCouplingResult:
                     rp = refl_global
                     trp = total_refl_global
                     tp = trans_global
+                    s11c = s11c_global
                 else:
                     rp = np.asarray(data[prefix + "reflection_power"])
                     trp = np.asarray(
@@ -346,6 +369,9 @@ class ChainEnergyCouplingResult:
                         data.get(prefix + "transmission_power",
                                  np.full_like(rp, np.nan))
                     )
+                    s11c = np.asarray(
+                        data.get(prefix + "s11_complex", np.full(rp.shape, np.nan)),
+                        dtype=complex)
                 sections[section_idx] = SectionEnergyCoupling(
                     section_index=int(data[prefix + "section_index"]),
                     freqs=np.asarray(data[prefix + "freqs"]),
@@ -361,6 +387,7 @@ class ChainEnergyCouplingResult:
                     total_reflected_power=trp,
                     transmission_power=tp,
                     power_balance=np.asarray(data[prefix + "power_balance"]),
+                    s11_complex=s11c,
                     excitation_mode=int(data[prefix + "excitation_mode"]),
                     wg=wg_lookup.get(section_idx),
                 )
@@ -624,6 +651,7 @@ def analyze_energy_coupling(
             "total_reflected_power": [],
             "transmission_power": [],
             "power_balance": [],
+            "s11_complex": [],
         }
         for idx in section_indices
     }
@@ -736,6 +764,8 @@ def analyze_energy_coupling(
                 bucket["total_reflected_power"].append(_to_numpy(total_reflected_power, cnp).item())
                 bucket["transmission_power"].append(_to_numpy(transmission_power, cnp).item())
                 bucket["power_balance"].append(_to_numpy(power_balance, cnp).item())
+                bucket["s11_complex"].append(
+                    complex(_to_numpy(s11_full[excitation_mode, excitation_mode], cnp).item()))
 
             if progress_callback is not None:
                 progress_callback(idx_f + 1, len(freqs))
@@ -760,6 +790,7 @@ def analyze_energy_coupling(
             total_reflected_power=np.asarray(data["total_reflected_power"]),
             transmission_power=np.asarray(data["transmission_power"]),
             power_balance=np.asarray(data["power_balance"]),
+            s11_complex=np.asarray(data["s11_complex"], dtype=complex),
             excitation_mode=excitation_mode,
             wg=wg,
         )
@@ -772,3 +803,108 @@ def analyze_energy_coupling(
         indexing=PHYSICAL_INDEXING,
         physical_wgs=physical_wgs,
     )
+
+
+def smooth_section_energy(
+    section: SectionEnergyCoupling,
+    freqs_dense: Sequence[float],
+    *,
+    base_model: SparModel | None = None,
+    power_floor: float = 1e-3,
+    rtol: float = 1e-2,
+) -> dict[str, np.ndarray]:
+    """Dense modal-power curves for one section, rebuilt from sparse samples.
+
+    Under adaptive sampling the energy analysis runs on a sparse grid, so its
+    curves alias the resonance teeth. This rebuilds them densely with ZERO
+    extra solver calls, by splitting the power formula into its two natures:
+
+    - the complex modal coefficients ``forward_left`` / ``backward_right`` are
+      (near-)meromorphic with the chain's shared resonance poles — those are
+      modeled by shared-pole :meth:`SparModel.sibling_fit`s off ``base_model``;
+    - everything analytic (cutoff masks, ``sign(Im Z)``, propagation factors,
+      and the power formula itself) is evaluated exactly on ``freqs_dense``.
+
+    ``base_model`` defaults to an AAA fit of the section's own ``s11_complex``
+    samples — the LOSSLESS analysis chain's reflection, whose poles are exactly
+    those of the modal coefficients. (The main sweep's lossy S11 model is NOT a
+    valid substitute: wall loss widens its poles by up to the wall-Q, which is
+    comparable to or below the leakage-Q of trapped-mode teeth.)
+
+    Modes whose sampled ``max |modal_power|`` stays below ``power_floor`` are
+    dropped (they carry no visible curve); their ids are simply absent from the
+    returned arrays.
+
+    Per-mode honesty gate: a mode whose coefficients the shared-pole basis
+    cannot even reproduce AT THE SAMPLES (relative residual > ``rtol``) goes to
+    ``unsmoothed_mode_ids`` instead of getting a dense curve. The dominant
+    cause is an in-band cutoff of the mode itself: the branch point is not
+    meromorphic AND the sparse samples do not resolve it (an independent
+    per-curve AAA fails just as hard there), so no rebuilt curve would be
+    trustworthy — callers should show such modes as the plain sampled polyline.
+    Healthy modes sit ~5 orders of magnitude below the default gate.
+
+    Returns a plain-numpy dict: ``freqs``, ``mode_ids`` (smoothed modes),
+    ``modal_power``, ``propagating_mask``, ``evanescent_mask`` (all dense,
+    shaped ``(n_dense,)`` / ``(K,)`` / ``(n_dense, K)``) plus
+    ``unsmoothed_mode_ids``.
+    """
+    if section.wg is None:
+        raise ValueError("section.wg is required to rebuild the analytic factors")
+    freqs_dense = np.asarray(freqs_dense, dtype=float)
+
+    if base_model is None:
+        s11c = section.s11_complex
+        if s11c is None or not np.isfinite(np.asarray(s11c, dtype=complex)).all():
+            raise ValueError(
+                "section.s11_complex is missing (result predates it?); "
+                "pass an explicit base_model instead"
+            )
+        base_model = fit_spar_model(section.freqs, s11c)
+
+    peak = np.max(np.abs(section.modal_power), axis=0)
+    candidates = np.asarray(section.mode_ids[peak >= power_floor], dtype=int)
+
+    F = section.freqs
+    fwd_cols, bwd_cols = [], []
+    smoothed_ids, unsmoothed_ids = [], []
+    for mode_id in candidates:
+        y_f = np.asarray(section.forward_left[:, mode_id], dtype=complex)
+        y_b = np.asarray(section.backward_right[:, mode_id], dtype=complex)
+        sib_f = base_model.sibling_fit(F, y_f)
+        sib_b = base_model.sibling_fit(F, y_b)
+        residual = max(
+            np.max(np.abs(sib_f(F) - y_f)) / max(np.max(np.abs(y_f)), 1e-300),
+            np.max(np.abs(sib_b(F) - y_b)) / max(np.max(np.abs(y_b)), 1e-300),
+        )
+        if residual > rtol:
+            unsmoothed_ids.append(int(mode_id))
+            continue
+        smoothed_ids.append(int(mode_id))
+        fwd_cols.append(sib_f(freqs_dense))
+        bwd_cols.append(sib_b(freqs_dense))
+
+    kept = np.asarray(smoothed_ids, dtype=int)
+    n_dense = freqs_dense.size
+    forward_left = (np.stack(fwd_cols, axis=1) if fwd_cols
+                    else np.empty((n_dense, 0), dtype=complex))
+    backward_right = (np.stack(bwd_cols, axis=1) if bwd_cols
+                      else np.empty((n_dense, 0), dtype=complex))
+
+    wg = _lossless_wg(section.wg)
+    prop_mask = _propagating_mask(wg, freqs_dense)[:, kept]
+    z_dense = np.asarray(hc.impedance_array(wg, freqs_dense))[:, kept]
+    p_dense = np.asarray(hc.propagation_factor_array(wg, freqs_dense))[:, kept]
+    backward_left = p_dense * backward_right
+
+    modal_power, prop_mask, evan_mask = _calc_modal_power(
+        forward_left, backward_left, backward_right, z_dense, prop_mask, cnp=np,
+    )
+    return {
+        "freqs": freqs_dense,
+        "mode_ids": kept,
+        "modal_power": modal_power,
+        "propagating_mask": prop_mask,
+        "evanescent_mask": evan_mask,
+        "unsmoothed_mode_ids": np.asarray(unsmoothed_ids, dtype=int),
+    }

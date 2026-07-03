@@ -223,3 +223,79 @@ def test_modal_analysis_applies_lossless_assumption() -> None:
     np.testing.assert_allclose(lossless.modal_power, lossy.modal_power)
     np.testing.assert_allclose(lossless.power_balance, lossy.power_balance)
     np.testing.assert_allclose(lossless.total_reflected_power, lossy.total_reflected_power)
+
+
+@pytest.fixture(scope="module")
+def smoothing_case():
+    """Dense truth vs sparse-grid analysis of the reduced Ka window.
+
+    The sparse grid is a strict subset of the dense one so the reconstruction
+    is compared at exactly the frequencies the sparse analysis never saw.
+    """
+    rwg = RecWG(a=7.112e-3, b=3.556e-3, l=2e-3, N=24)
+    cwg = CirWG(r=4.2e-3, l=1.5e-3, N=64)
+    dsk = CirWG(r=5.4e-3, l=0.26e-3, N=96, er=9.2)
+    chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
+    config = pwmma.Config(nproc=2, use_gpu=False, use_double_precision=True)
+    cms = [pwmma.get_coupling_matrix(t, config) for t in chain.transitions]
+    dense = np.linspace(28.0, 34.0, 121) * 1e9
+    sparse = dense[::4]                                    # 31 points
+    truth = pwmma.analyze_energy_coupling(
+        chain, dense, config, sections=[2], show_progress=False, cms=cms)
+    coarse = pwmma.analyze_energy_coupling(
+        chain, sparse, config, sections=[2], show_progress=False, cms=cms)
+    return truth, coarse, dense
+
+
+def test_s11_complex_matches_reflection_power(smoothing_case) -> None:
+    truth, _, _ = smoothing_case
+    sec = truth.get_section(2)
+    np.testing.assert_allclose(
+        np.abs(sec.s11_complex) ** 2, sec.reflection_power, rtol=1e-10)
+
+
+def test_smooth_section_energy_matches_dense_truth(smoothing_case) -> None:
+    truth, coarse, dense = smoothing_case
+    sec = coarse.get_section(2)
+    smooth = pwmma.smooth_section_energy(sec, dense)
+
+    kept = smooth["mode_ids"]
+    assert kept.size > 0
+    assert smooth["modal_power"].shape == (dense.size, kept.size)
+
+    # Mode 53 (TM1,3S) crosses cutoff at 29.6 GHz INSIDE the band: its branch
+    # point is not representable in the shared-pole basis and the sparse
+    # samples cannot resolve it either (an independent AAA fails just as
+    # hard), so the honesty gate must route it to unsmoothed_mode_ids.
+    assert 53 in smooth["unsmoothed_mode_ids"]
+    assert 53 not in kept
+
+    tsec = truth.get_section(2)
+    # analytic factors are rebuilt exactly, not fitted
+    np.testing.assert_array_equal(
+        smooth["propagating_mask"], tsec.propagating_mask[:, kept])
+    np.testing.assert_array_equal(
+        smooth["evanescent_mask"], tsec.evanescent_mask[:, kept])
+
+    err = np.max(np.abs(smooth["modal_power"] - tsec.modal_power[:, kept]))
+    assert err < 1e-5, f"max dense-grid power error {err:.2e}"
+
+
+def test_smooth_section_energy_power_floor_and_errors(smoothing_case) -> None:
+    import dataclasses
+
+    _, coarse, dense = smoothing_case
+    sec = coarse.get_section(2)
+
+    everything = pwmma.smooth_section_energy(sec, dense, power_floor=0.0)
+    assert (everything["mode_ids"].size + everything["unsmoothed_mode_ids"].size
+            == sec.mode_ids.size)
+
+    strong_only = pwmma.smooth_section_energy(sec, dense, power_floor=0.5)
+    assert strong_only["mode_ids"].size < everything["mode_ids"].size
+
+    with pytest.raises(ValueError, match="section.wg"):
+        pwmma.smooth_section_energy(dataclasses.replace(sec, wg=None), dense)
+    stale = dataclasses.replace(sec, s11_complex=None)
+    with pytest.raises(ValueError, match="s11_complex"):
+        pwmma.smooth_section_energy(stale, dense)

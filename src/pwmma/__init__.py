@@ -4,6 +4,7 @@ from .analysis import (
     ChainEnergyCouplingResult,
     SectionEnergyCoupling,
     analyze_energy_coupling,
+    smooth_section_energy,
 )
 from .analysis_plotting import (
     plot_chain_energy_overview,
@@ -37,6 +38,7 @@ __all__ = [
     # Primary workflow
     'calc_spars_of_wgchain',
     'analyze_energy_coupling',
+    'smooth_section_energy',
     # Solver session (per-frequency core)
     'ChainSolver',
     # Rational sweep (AAA/AFS)
