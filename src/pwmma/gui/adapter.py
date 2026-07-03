@@ -156,24 +156,29 @@ class _SolveRecorder:
 
 def run_adaptive_spars(solver, f0, f1,
                        progress_callback: Callable[[int, float], None] | None = None,
-                       cms=None) -> dict:
+                       cms=None, n_uniform: int = 0) -> dict:
     """Adaptive fundamental-mode S-parameter samples (the production line).
 
     Plain-numpy payload (diskcache-safe); the UI refits with fit_spar_model on
     render (milliseconds). ``progress_callback(k, f)`` fires once per solve.
 
-    Seeds with ``adaptive_seed_frequencies`` (uniform exploration floor +
-    cutoff hotspot probes, reachability-filtered when ``cms`` is given): the
-    bare AFS loop can converge on a quiet S11 background before any sample
-    has felt a narrow tooth. ``max_solves`` gets headroom above the seed
-    count so refinement is never starved.
+    The default is the bare AFS loop — the economy behavior the adaptive line
+    is designed around. It can converge on a quiet S11 background without
+    feeling narrow sub-tolerance teeth; that is an accepted trade-off, like
+    modal truncation or quadrature order (no solver setting is perfectly
+    faithful). Runs that must identify every fine tooth opt in by setting
+    ``n_uniform`` > 0 (the GUI "seeds" field), which pre-samples a uniform
+    exploration floor of that many points plus cutoff hotspot probes via
+    ``adaptive_seed_frequencies`` (reachability-filtered when ``cms`` is
+    given); ``max_solves`` then gets headroom above the seed count.
     """
     rec = _SolveRecorder(solver, on_solve=progress_callback)
     chain = getattr(solver, "chain", None)
     seed = None
     max_solves = 200
-    if chain is not None:
-        seed = adaptive_seed_frequencies(chain, float(f0), float(f1), cms=cms)
+    if n_uniform and chain is not None:
+        seed = adaptive_seed_frequencies(chain, float(f0), float(f1), cms=cms,
+                                         n_uniform=int(n_uniform))
         max_solves = len(seed) + 200
     model = adaptive_spar_model(rec, float(f0), float(f1),     # S11[0,0] drives
                                 seed=seed, max_solves=max_solves)

@@ -121,14 +121,27 @@ def _left_panel(d: dict) -> html.Div:
                                            className="num-input")),
                 # One sampling strategy for the WHOLE run (spars and energy
                 # share the grid). Checked = adaptive AAA/AFS production line
-                # (fundamental mode, ~40 solves; "points" is unused and greys
-                # out); unchecked = the uniform research line.
+                # (fundamental mode, low solve count; "points" is unused and
+                # greys out); unchecked = the uniform research line.
                 dcc.Checklist(
                     id="sweep-mode",
                     options=[{"label": " adaptive (AAA)", "value": "adaptive"}],
                     value=["adaptive"] if d.get("sweep") == "adaptive" else [],
                     className="inline-check"),
+                # Economy/precision knob for adaptive runs: 0 = pure AFS
+                # (cheapest); >0 pre-samples a uniform floor of that many
+                # points + cutoff probes for fine-tooth runs.
+                _field("seeds", dcc.Input(id="sweep-seed", type="number",
+                                          min=0, value=d.get("sweep_seed", 0),
+                                          disabled=d.get("sweep") != "adaptive",
+                                          className="num-input")),
             ], className="row"),
+            html.Div(
+                "adaptive seeds: 0 = pure AFS (cheapest); raise (e.g. 129) to "
+                "pre-sample a uniform floor + cutoff probes when every fine "
+                "tooth must be resolved.",
+                className="hint",
+            ),
         ], className="group"),
     ], className="left-panel")
 

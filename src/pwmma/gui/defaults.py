@@ -17,7 +17,7 @@ BUILTIN_DEFAULTS = {
     "f_start": 28.0, "f_stop": 34.0, "f_n": 61,
     "nproc": 8,
     "use_gpu": ["gpu"], "precision": "single",
-    "compute": "both", "sweep": "uniform",
+    "compute": "both", "sweep": "uniform", "sweep_seed": 0,
     "cm_cache_enable": [], "cm_cache_dir": ".pwmma_cm_cache",
 }
 

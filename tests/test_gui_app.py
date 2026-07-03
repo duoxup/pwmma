@@ -652,3 +652,24 @@ def test_compute_payload_uniform_has_no_energy_model():
     payload, err = compute_payload(_small_chain_form("energy"), lambda d, t: None)
     assert err is None
     assert payload["energy_model"] is None
+
+
+def test_compute_payload_adaptive_seed_knob():
+    from pwmma.gui.callbacks import compute_payload
+
+    # default (sweep_seed absent/0) = economy: the bare AFS loop
+    p0, err0 = compute_payload(_adaptive_form("spars"), lambda d, t: None)
+    assert err0 is None
+
+    # opt-in precision: at least the requested uniform floor gets solved
+    form = dict(_adaptive_form("spars"), sweep_seed=33)
+    p1, err1 = compute_payload(form, lambda d, t: None)
+    assert err1 is None
+    assert p1["spars_model"]["n_solves"] >= 33
+    assert p0["spars_model"]["n_solves"] < p1["spars_model"]["n_solves"]
+
+    # junk value degrades to economy instead of crashing
+    form_bad = dict(_adaptive_form("spars"), sweep_seed="oops")
+    p2, err2 = compute_payload(form_bad, lambda d, t: None)
+    assert err2 is None
+    assert p2["spars_model"]["n_solves"] == p0["spars_model"]["n_solves"]

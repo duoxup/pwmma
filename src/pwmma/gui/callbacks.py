@@ -111,16 +111,19 @@ def register_callbacks(app):
         State("use-gpu", "value"), State("precision", "value"),
         State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
         State("compute-select", "value"), State("sweep-mode", "value"),
+        State("sweep-seed", "value"),
         prevent_initial_call=True,
     )
     def _save_default(n, rows, sym, f_start, f_stop, f_n, nproc,
-                      use_gpu, precision, cache_enable, cache_dir, compute, sweep):
+                      use_gpu, precision, cache_enable, cache_dir, compute, sweep,
+                      sweep_seed):
         defaults.save_defaults({
             "rows": rows, "sym": list(sym or []),
             "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
             "nproc": nproc,
             "use_gpu": list(use_gpu or []), "precision": precision,
             "compute": compute, "sweep": sweep_mode_value(sweep),
+            "sweep_seed": sweep_seed,
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
         })
         return n
@@ -139,6 +142,7 @@ def register_callbacks(app):
         Output("compute-select", "options"),
         Output("compute-select", "value"),
         Output("f-n", "disabled"),
+        Output("sweep-seed", "disabled"),
         Input("sweep-mode", "value"),
         State("compute-select", "value"),
     )
@@ -146,14 +150,15 @@ def register_callbacks(app):
         # compute=energy + sweep=adaptive cannot exist: the S11 fit loop IS the
         # sampler. Disable the option under adaptive and lift a stranded
         # energy-only selection to Both (compute_payload coerces defensively
-        # too). "points" (f_n) is unused by adaptive -> grey it out as well.
+        # too). "points" (f_n) is unused by adaptive -> grey it out as well;
+        # "seeds" is adaptive-only, so its enabled state is the mirror image.
         energy_off = sweep_mode_value(sweep_check) == "adaptive"
         options = [{"label": "Both", "value": "both"},
                    {"label": "S-parameters", "value": "spars"},
                    {"label": "Mode analysis", "value": "energy",
                     "disabled": energy_off}]
         value = "both" if (energy_off and compute == "energy") else no_update
-        return options, value, energy_off
+        return options, value, energy_off, not energy_off
 
     @app.callback(
         Output("prune-status", "children"),
@@ -307,6 +312,10 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         spars = None
         spars_model = None
         energy_model = None
+        try:
+            seed_pts = max(0, int(form.get("sweep_seed") or 0))
+        except (TypeError, ValueError):
+            seed_pts = 0
         if sweep == "adaptive":
             # spars first — the adaptive loop produces the run's sample grid;
             # energy then reuses that grid (one grid per run).
@@ -315,7 +324,7 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
                 status_callback("solving")
             spars_model = adapter.run_adaptive_spars(
                 solver, freqs[0], freqs[-1], progress_callback=progress_callback,
-                cms=cms)
+                cms=cms, n_uniform=seed_pts)
             if do_energy:
                 if status_callback:
                     status_callback("sweep")
@@ -402,7 +411,8 @@ def register_run_callback(app):
                State("nproc", "value"),
                State("use-gpu", "value"), State("precision", "value"),
                State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
-               State("compute-select", "value"), State("sweep-mode", "value")],
+               State("compute-select", "value"), State("sweep-mode", "value"),
+               State("sweep-seed", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False),
                  (Output("stop-button", "disabled"), False, True)],
@@ -416,13 +426,13 @@ def register_run_callback(app):
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
              nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
-             compute, sweep):
+             compute, sweep, sweep_seed):
         sweep = sweep_mode_value(sweep)
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "nproc": nproc,
                 "use_gpu": bool(use_gpu), "precision": precision,
                 "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir,
-                "compute": compute, "sweep": sweep}
+                "compute": compute, "sweep": sweep, "sweep_seed": sweep_seed}
         adaptive = sweep == "adaptive"
         n_sweeps = sum(compute_selection(compute))
         bar_max = "1" if adaptive else (str(n_sweeps * int(f_n)) if f_n else "1")

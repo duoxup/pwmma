@@ -907,13 +907,17 @@ def adaptive_seed_frequencies(
     n_uniform: int = 129,
     **probe_kw,
 ) -> np.ndarray:
-    """Production seed set for :func:`pwmma.adaptive_spar_model`.
+    """Precision (fine-tooth) seed set for :func:`pwmma.adaptive_spar_model`.
 
-    The AFS stop rule measures model self-consistency, not truth: on a window
-    with a quiet S11 background the loop can converge before any sample has
-    come within a resonance's influence radius and silently miss it (observed
-    on the default Ka window: 8 solves, the only in-band tooth lost). Two
-    ingredients remove the luck, at the cost of a known floor of solves:
+    This is an OPT-IN preset, not the economy default: it multiplies the
+    solve count severalfold, which is only worth paying when a run must
+    identify every narrow tooth. The bare AFS stop rule measures model
+    self-consistency, not truth, so on a window with a quiet S11 background
+    the loop can converge before any sample has come within a resonance's
+    influence radius (observed on the default Ka window: 8 solves, a narrow
+    sub-relevance tooth at 29.17 GHz skipped — acceptable for design use,
+    where such teeth rarely matter and CST-class solvers barely resolve them
+    either). Two ingredients remove the luck when it does matter:
 
     - a **uniform exploration floor** of ``n_uniform`` points. With spacing
       ``d``, a tooth is reliably felt when its strength x width exceeds
