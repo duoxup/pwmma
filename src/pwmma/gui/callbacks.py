@@ -136,26 +136,6 @@ def register_callbacks(app):
         return f"{device} · {precision or '—'} · {n} BLAS threads"
 
     @app.callback(
-        Output("compute-select", "options"),
-        Output("compute-select", "value"),
-        Input("sweep-mode", "value"),
-        State("compute-select", "value"),
-    )
-    def _sweep_compute_guard(sweep_check, compute):
-        # compute=energy + sweep=adaptive cannot exist: the S11 fit loop IS the
-        # sampler. Disable the option under adaptive and lift a stranded
-        # energy-only selection to Both (compute_payload coerces defensively
-        # too). "points" stays live in both modes — it defines the uniform
-        # grid, which doubles as the AFS seed.
-        energy_off = sweep_mode_value(sweep_check) == "adaptive"
-        options = [{"label": "Both", "value": "both"},
-                   {"label": "S-parameters", "value": "spars"},
-                   {"label": "Mode analysis", "value": "energy",
-                    "disabled": energy_off}]
-        value = "both" if (energy_off and compute == "energy") else no_update
-        return options, value
-
-    @app.callback(
         Output("prune-status", "children"),
         Input("prune-cache", "n_clicks"),
         State("cm-cache-dir", "value"),
@@ -292,10 +272,6 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         return None, str(exc)
     compute = form.get("compute", "both")
     sweep = form.get("sweep", "uniform")
-    if sweep == "adaptive" and compute == "energy":
-        # energy-only cannot drive the adaptive sampler (the S11 fit loop IS
-        # the sampler) — the UI prevents this combo; coerce stale saved state.
-        compute = "both"
     do_spars, do_energy = compute_selection(compute)
     try:
         n_phys = len(chain.wgs) + (len(chain.wgs) - 1 if chain.sym else 0)
@@ -307,14 +283,18 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         spars = None
         spars_model = None
         energy_model = None
+        afs_confident = None
         if sweep == "adaptive":
-            # spars first — the AFS loop (seeded by the uniform grid) produces
-            # the run's sample grid; energy then reuses it (one grid per run).
+            # The AFS loop always runs under adaptive — it IS the sampler
+            # (S11-driven refinement seeded by the uniform grid); energy then
+            # reuses its final grid (one grid per run). The S-parameter model
+            # is kept in the payload only when S-parameters were requested.
             solver = adapter.make_solver(chain, cfg, cms=cms)
             if status_callback:
                 status_callback("solving")
             spars_model = adapter.run_adaptive_spars(
                 solver, freqs, progress_callback=progress_callback)
+            afs_confident = bool(spars_model.get("confident", True))
             if do_energy:
                 if status_callback:
                     status_callback("sweep")
@@ -327,6 +307,8 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
                 if status_callback:
                     status_callback("solving")
                 energy_model = adapter.run_energy_model(result, freqs[0], freqs[-1])
+            if not do_spars:
+                spars_model = None          # sampler byproduct, not requested
         else:
             solver = adapter.make_solver(chain, cfg, cms=cms) if do_spars else None
             if status_callback:
@@ -356,6 +338,10 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         "section_indices": list(result.section_indices) if result is not None else [],
         "result": result, "spars": spars, "spars_model": spars_model,
         "energy_model": energy_model,
+        # AFS convergence flag, kept separately (None for uniform runs): an
+        # energy-only adaptive run discards the S-parameter model but its
+        # grid quality still depends on the sampler having converged.
+        "afs_confident": afs_confident,
         "compute": compute, "sweep": sweep,
         # mode counts so the S-param panel can offer mode selectors without the
         # heavy arrays: n_in = excitation (port-1) modes, n_out = max over the
@@ -425,45 +411,49 @@ def register_run_callback(app):
         adaptive = sweep == "adaptive"
         n_sweeps = sum(compute_selection(compute))
         bar_max = "1" if adaptive else (str(n_sweeps * int(f_n)) if f_n else "1")
+        # The bar is a uniform-sweep instrument: under AFS the total is not
+        # meaningful, so it stays dim for the WHOLE run (all phases; the
+        # dynamic detail lives in the info cell instead).
+        bar_cls = _BAR_DIM if adaptive else _BAR
         phase_box = {"phase": "sweep"}    # compute_payload reports phase changes
 
         def status(phase):
             phase_box["phase"] = phase
             if phase == "cm":
                 set_progress(("cm", "0", bar_max, "led led-cm",
-                              "computing coupling matrices…", _BAR))
+                              "computing coupling matrices…", bar_cls))
             elif phase == "solving":
                 set_progress(("solving", "0", "1", "led led-sweep",
                               "adaptive sampling…", _BAR_DIM))
             else:  # "sweep"
-                set_progress(("sweeping", "0", bar_max, "led led-sweep", "", _BAR))
+                set_progress(("sweeping", "0", bar_max, "led led-sweep", "", bar_cls))
 
         def progress(done, tot):
             if phase_box["phase"] == "solving":
                 set_progress(adaptive_progress(done, tot))   # tot carries f_hz
             elif adaptive:
-                # energy phase of an adaptive run: known total, nonuniform grid
+                # energy phase of an adaptive run: progress detail as text,
+                # bar stays dim like the rest of the run
                 set_progress(("sweeping", str(done), str(tot), "led led-sweep",
-                              f"energy {done}/{tot}", _BAR))
+                              f"energy {done}/{tot}", _BAR_DIM))
             else:
                 set_progress(sweep_progress(done, tot, f_start, f_stop, f_n))
 
         payload, error = compute_payload(form, progress, status_callback=status)
         if error is not None:
             set_progress(("error", "0", bar_max, "led led-error",
-                          "see message panel", _BAR))
+                          "see message panel", bar_cls))
             return None, error
         token = f"run-{n_clicks}"
         if not store_payload(app._pwmma_cache, token, payload):
             set_progress(("error", "0", bar_max, "led led-error",
-                          "see message panel", _BAR))
+                          "see message panel", bar_cls))
             return None, payload_too_large_message(payload, app._pwmma_cache)
         message = ""
-        mp = payload.get("spars_model")
-        if mp is not None and not mp.get("confident", True):
+        if payload.get("afs_confident") is False:
             message = ("warning: adaptive sweep did not converge within its solve "
                        "budget — curves are best-effort (try a uniform run to verify)")
-        set_progress(("done", bar_max, bar_max, "led led-done", "", _BAR))
+        set_progress(("done", bar_max, bar_max, "led led-done", "", bar_cls))
         return {"token": token, "section_indices": payload["section_indices"],
                 "compute": payload["compute"], "sweep": payload["sweep"],
                 "n_in": payload["n_in"], "n_out": payload["n_out"]}, message

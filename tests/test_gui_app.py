@@ -578,19 +578,23 @@ def test_compute_payload_adaptive_spars_only():
     assert isinstance(render_spars(payload), go.Figure)
 
 
-def test_compute_payload_adaptive_energy_coerces_to_both():
+def test_compute_payload_adaptive_energy_only_runs_on_afs_grid():
     import numpy as np
 
     from pwmma.gui.callbacks import compute_payload
     payload, err = compute_payload(_adaptive_form("energy"), lambda d, t: None)
     assert err is None
-    # energy-only cannot drive the sampler -> coerced to both
-    assert payload["spars_model"] is not None
+    # energy-only + AFS is valid (the uniform grid is the base): the AFS
+    # loop runs as the sampler, energy uses its final grid, and the
+    # S-parameter model — an unrequested byproduct — is dropped
+    assert payload["compute"] == "energy"
+    assert payload["spars_model"] is None
     assert payload["result"] is not None
-    assert payload["compute"] == "both"
-    # energy ran on the adaptive sample grid (sorted)
+    assert payload["afs_confident"] is True
     sec = payload["result"].get_section(1)
-    np.testing.assert_array_equal(sec.freqs, np.sort(payload["spars_model"]["s11"]["F"]))
+    grid = np.linspace(28e9, 34e9, 3)            # f_n=3 -> the AFS seed grid
+    assert np.isin(grid, sec.freqs).all()
+    assert np.all(np.diff(sec.freqs) > 0)        # sorted AFS grid
 
 
 def test_progress_helpers_six_fields():
