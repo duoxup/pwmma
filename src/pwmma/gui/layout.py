@@ -115,33 +115,20 @@ def _left_panel(d: dict) -> html.Div:
                                          value=d.get("f_stop", 34.0),
                                          className="num-input")),
                 html.Span("GHz ×", className="lbl range-dash"),
-                _field("points", dcc.Input(id="f-n", type="number",
+                _field("points", dcc.Input(id="f-n", type="number", min=3,
                                            value=d.get("f_n", 61),
-                                           disabled=d.get("sweep") == "adaptive",
                                            className="num-input")),
-                # One sampling strategy for the WHOLE run (spars and energy
-                # share the grid). Checked = adaptive AAA/AFS production line
-                # (fundamental mode, low solve count; "points" is unused and
-                # greys out); unchecked = the uniform research line.
+                # points (min 3: both ends + center) defines the uniform grid
+                # in BOTH modes. Checked = AFS refines on top of that grid
+                # (fundamental-mode line); unchecked = the plain uniform
+                # research line. Either way the S-parameter display ends in
+                # an AAA rational fit of the solved samples.
                 dcc.Checklist(
                     id="sweep-mode",
-                    options=[{"label": " adaptive (AAA)", "value": "adaptive"}],
+                    options=[{"label": " adaptive (AFS)", "value": "adaptive"}],
                     value=["adaptive"] if d.get("sweep") == "adaptive" else [],
                     className="inline-check"),
-                # Economy/precision knob for adaptive runs: 0 = pure AFS
-                # (cheapest); >0 pre-samples a uniform floor of that many
-                # points + cutoff probes for fine-tooth runs.
-                _field("seeds", dcc.Input(id="sweep-seed", type="number",
-                                          min=0, value=d.get("sweep_seed", 0),
-                                          disabled=d.get("sweep") != "adaptive",
-                                          className="num-input")),
             ], className="row"),
-            html.Div(
-                "adaptive seeds: 0 = pure AFS (cheapest); raise (e.g. 129) to "
-                "pre-sample a uniform floor + cutoff probes when every fine "
-                "tooth must be resolved.",
-                className="hint",
-            ),
         ], className="group"),
     ], className="left-panel")
 

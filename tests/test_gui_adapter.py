@@ -65,6 +65,12 @@ def test_bad_freq_range_raises():
         A.parse_freqs(34.0, 28.0, 4)
 
 
+def test_too_few_freq_points_raises():
+    # min 3 = both ends + center; also the minimum AFS seed
+    with pytest.raises(A.GuiInputError, match=">= 3"):
+        A.parse_freqs(28.0, 34.0, 2)
+
+
 def test_run_energy_returns_result_and_reports_progress():
     rows = [
         {"kind": "rec", "a": 7.112, "b": 3.556, "l": 2.0, "N": 24, "er": "1", "sigma": "5.8e7"},
@@ -156,10 +162,12 @@ def test_run_spars_on_matches_run_spars():
 def test_run_adaptive_spars_shape_and_shared_samples():
     solver = A.make_solver(_small_chain(), _cpu_cfg())
     ticks = []
-    mp = A.run_adaptive_spars(solver, 28e9, 34e9,
+    grid = np.linspace(28e9, 34e9, 5)                 # the uniform grid = seed
+    mp = A.run_adaptive_spars(solver, grid,
                               progress_callback=lambda k, f: ticks.append((k, f)))
     assert set(mp) >= {"f0", "f1", "s11", "s21", "n_solves", "confident"}
     F = mp["s11"]["F"]
+    assert np.isin(grid, F).all()                     # every seed was solved
     # every sample was a true solve, each reported to the progress callback
     assert mp["n_solves"] == len(ticks) == len(F)
     assert np.isfinite(mp["s11"]["y"]).all()

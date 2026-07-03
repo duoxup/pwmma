@@ -92,36 +92,73 @@ def structure_preview_figure(rows: list[dict], sym: bool) -> go.Figure:
     return _theme(fig, axes=False)
 
 
-def sparam_figure(spars: dict, *, out_modes=(0,), in_modes=(0,)) -> go.Figure:
+def sparam_figure(spars: dict, *, out_modes=(0,), in_modes=(0,),
+                  fit_cache: dict | None = None) -> go.Figure:
     """|S11| (reflection) and |S21| (transmission) in dB, one pair of curves for
     every (output i, input j) in the Cartesian product of the selected modes.
+
+    Every displayed pair is an AAA rational fit of the uniform sweep samples,
+    drawn dense with open-circle markers at the true sample points — the same
+    visual language as the AFS view: the sampling mode changes where the
+    solver runs, not how results are shown. A curve the fit cannot handle
+    falls back to its raw sample polyline. Fits use a display-grade tolerance
+    (~-80 dB); ``fit_cache`` (a per-run dict) memoizes the dense dB arrays so
+    only the first render of a pair pays the fit.
 
     ``out_modes`` index the response (matrix row), ``in_modes`` the excitation
     (matrix column); default (0, 0) is the dominant-mode view. Indices out of
     range for a block (S11 rows = port-1 modes, S21 rows = port-2 modes) are
     skipped, so unequal port mode counts are handled gracefully.
     """
-    freqs_ghz = np.asarray(spars["freqs"]) * 1e-9
+    freqs = np.asarray(spars["freqs"], dtype=float)
+    freqs_ghz = freqs * 1e-9
+    dense = np.linspace(freqs[0], freqs[-1], 2001)
     s11 = np.asarray(spars["s11"])
     s21 = np.asarray(spars["s21"])
     out_modes = [int(i) for i in (out_modes or (0,))]
     in_modes = [int(j) for j in (in_modes or (0,))]
     n_in = s11.shape[2]
     fig = go.Figure()
+    n_curve = 0
     for j in in_modes:
         if not 0 <= j < n_in:
             continue
         for i in out_modes:
             for label, mat in (("S11", s11), ("S21", s21)):
-                if 0 <= i < mat.shape[1]:
-                    with np.errstate(divide="ignore"):
-                        db = 20.0 * np.log10(np.abs(mat[:, i, j]))
-                    # |S| == 0 (pervasive in cir<->cir junctions by azimuthal
-                    # symmetry) -> -inf, which breaks Plotly's y autoscale and
-                    # blanks the panel; NaN is skipped instead of plotted.
-                    db = np.where(np.isfinite(db), db, np.nan)
-                    fig.add_trace(go.Scatter(x=freqs_ghz, y=db, mode="lines",
-                                             name=f"{label}[{i},{j}]"))
+                if not 0 <= i < mat.shape[1]:
+                    continue
+                y = mat[:, i, j]
+                name = f"{label}[{i},{j}]"
+                color = _COLORWAY[n_curve % len(_COLORWAY)]
+                n_curve += 1
+                # |S| == 0 (pervasive in cir<->cir junctions by azimuthal
+                # symmetry) -> -inf, which breaks Plotly's y autoscale and
+                # blanks the panel; NaN is skipped instead of plotted.
+                with np.errstate(divide="ignore"):
+                    db_s = 20.0 * np.log10(np.abs(y))
+                db_s = np.where(np.isfinite(db_s), db_s, np.nan)
+                db = fit_cache.get(name) if fit_cache is not None else None
+                if db is None:
+                    try:
+                        model = fit_spar_model(freqs, np.asarray(y, dtype=complex),
+                                               rtol=1e-4)
+                        with np.errstate(divide="ignore"):
+                            db = 20.0 * np.log10(np.abs(model(dense)))
+                        db = np.where(np.isfinite(db), db, np.nan)
+                    except (ValueError, np.linalg.LinAlgError):
+                        fig.add_trace(go.Scatter(x=freqs_ghz, y=db_s, mode="lines",
+                                                 name=name, line=dict(color=color)))
+                        continue
+                    if fit_cache is not None:
+                        fit_cache[name] = db
+                fig.add_trace(go.Scatter(x=dense * 1e-9, y=db, mode="lines",
+                                         name=name, legendgroup=name,
+                                         line=dict(color=color)))
+                fig.add_trace(go.Scatter(x=freqs_ghz, y=db_s, mode="markers",
+                                         name=f"{name} samples", legendgroup=name,
+                                         showlegend=False,
+                                         marker=dict(color=color, size=6,
+                                                     symbol="circle-open")))
     fig.update_layout(
         autosize=True,
         margin=dict(l=50, r=10, t=30, b=40),

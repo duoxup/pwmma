@@ -111,19 +111,16 @@ def register_callbacks(app):
         State("use-gpu", "value"), State("precision", "value"),
         State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
         State("compute-select", "value"), State("sweep-mode", "value"),
-        State("sweep-seed", "value"),
         prevent_initial_call=True,
     )
     def _save_default(n, rows, sym, f_start, f_stop, f_n, nproc,
-                      use_gpu, precision, cache_enable, cache_dir, compute, sweep,
-                      sweep_seed):
+                      use_gpu, precision, cache_enable, cache_dir, compute, sweep):
         defaults.save_defaults({
             "rows": rows, "sym": list(sym or []),
             "f_start": f_start, "f_stop": f_stop, "f_n": f_n,
             "nproc": nproc,
             "use_gpu": list(use_gpu or []), "precision": precision,
             "compute": compute, "sweep": sweep_mode_value(sweep),
-            "sweep_seed": sweep_seed,
             "cm_cache_enable": list(cache_enable or []), "cm_cache_dir": cache_dir,
         })
         return n
@@ -141,8 +138,6 @@ def register_callbacks(app):
     @app.callback(
         Output("compute-select", "options"),
         Output("compute-select", "value"),
-        Output("f-n", "disabled"),
-        Output("sweep-seed", "disabled"),
         Input("sweep-mode", "value"),
         State("compute-select", "value"),
     )
@@ -150,15 +145,15 @@ def register_callbacks(app):
         # compute=energy + sweep=adaptive cannot exist: the S11 fit loop IS the
         # sampler. Disable the option under adaptive and lift a stranded
         # energy-only selection to Both (compute_payload coerces defensively
-        # too). "points" (f_n) is unused by adaptive -> grey it out as well;
-        # "seeds" is adaptive-only, so its enabled state is the mirror image.
+        # too). "points" stays live in both modes — it defines the uniform
+        # grid, which doubles as the AFS seed.
         energy_off = sweep_mode_value(sweep_check) == "adaptive"
         options = [{"label": "Both", "value": "both"},
                    {"label": "S-parameters", "value": "spars"},
                    {"label": "Mode analysis", "value": "energy",
                     "disabled": energy_off}]
         value = "both" if (energy_off and compute == "energy") else no_update
-        return options, value, energy_off, not energy_off
+        return options, value
 
     @app.callback(
         Output("prune-status", "children"),
@@ -312,19 +307,14 @@ def compute_payload(form: dict, progress_callback, status_callback=None):
         spars = None
         spars_model = None
         energy_model = None
-        try:
-            seed_pts = max(0, int(form.get("sweep_seed") or 0))
-        except (TypeError, ValueError):
-            seed_pts = 0
         if sweep == "adaptive":
-            # spars first — the adaptive loop produces the run's sample grid;
-            # energy then reuses that grid (one grid per run).
+            # spars first — the AFS loop (seeded by the uniform grid) produces
+            # the run's sample grid; energy then reuses it (one grid per run).
             solver = adapter.make_solver(chain, cfg, cms=cms)
             if status_callback:
                 status_callback("solving")
             spars_model = adapter.run_adaptive_spars(
-                solver, freqs[0], freqs[-1], progress_callback=progress_callback,
-                cms=cms, n_uniform=seed_pts)
+                solver, freqs, progress_callback=progress_callback)
             if do_energy:
                 if status_callback:
                     status_callback("sweep")
@@ -411,8 +401,7 @@ def register_run_callback(app):
                State("nproc", "value"),
                State("use-gpu", "value"), State("precision", "value"),
                State("cm-cache-enable", "value"), State("cm-cache-dir", "value"),
-               State("compute-select", "value"), State("sweep-mode", "value"),
-               State("sweep-seed", "value")],
+               State("compute-select", "value"), State("sweep-mode", "value")],
         background=True,
         running=[(Output("run-button", "disabled"), True, False),
                  (Output("stop-button", "disabled"), False, True)],
@@ -426,13 +415,13 @@ def register_run_callback(app):
     )
     def _run(set_progress, n_clicks, rows, sym, f_start, f_stop, f_n,
              nproc, use_gpu, precision, cm_cache_enable, cm_cache_dir,
-             compute, sweep, sweep_seed):
+             compute, sweep):
         sweep = sweep_mode_value(sweep)
         form = {"rows": rows, "sym": bool(sym), "f_start": f_start, "f_stop": f_stop,
                 "f_n": f_n, "nproc": nproc,
                 "use_gpu": bool(use_gpu), "precision": precision,
                 "cm_cache_enabled": bool(cm_cache_enable), "cm_cache_dir": cm_cache_dir,
-                "compute": compute, "sweep": sweep, "sweep_seed": sweep_seed}
+                "compute": compute, "sweep": sweep}
         adaptive = sweep == "adaptive"
         n_sweeps = sum(compute_selection(compute))
         bar_max = "1" if adaptive else (str(n_sweeps * int(f_n)) if f_n else "1")
@@ -494,12 +483,27 @@ def register_run_callback(app):
         return "stopped", "0", "led led-idle", "", _BAR
 
 
-def render_spars(payload, out_modes=(0,), in_modes=(0,)):
+# One run's worth of uniform-sweep display fits: an AAA fit of a dense
+# research curve costs ~seconds, so re-renders (mode-pair changes, tab
+# switches) must not refit. Keyed by run token; a new run drops the old set.
+_spars_fit_cache = {"token": None, "fits": {}}
+
+
+def spars_fit_cache(token) -> dict:
+    if token != _spars_fit_cache["token"]:
+        _spars_fit_cache["token"] = token
+        _spars_fit_cache["fits"] = {}
+    return _spars_fit_cache["fits"]
+
+
+def render_spars(payload, out_modes=(0,), in_modes=(0,), token=None):
     if payload.get("spars_model") is not None:      # adaptive line: model view
         return figures.sparam_model_figure(payload["spars_model"])
     if payload.get("spars") is None:
         return figures.empty_figure("S-parameters not computed for this run")
-    return figures.sparam_figure(payload["spars"], out_modes=out_modes, in_modes=in_modes)
+    return figures.sparam_figure(payload["spars"], out_modes=out_modes,
+                                 in_modes=in_modes,
+                                 fit_cache=spars_fit_cache(token))
 
 
 # Matches both rectangular ("TE1,0") and circular ("TM0,1S") mode labels.
@@ -652,8 +656,10 @@ def register_plot_callbacks(app):
                   Input("spars-out-modes", "value"),
                   Input("spars-in-modes", "value"))
     def _spars(data, out_modes, in_modes):
-        p = _payload(data and data.get("token"))
-        return render_spars(p, out_modes, in_modes) if p else figures.empty_figure("Run first")
+        token = data and data.get("token")
+        p = _payload(token)
+        return (render_spars(p, out_modes, in_modes, token=token)
+                if p else figures.empty_figure("Run first"))
 
     @app.callback(
         Output("result-tab", "value", allow_duplicate=True),

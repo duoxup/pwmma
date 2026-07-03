@@ -224,7 +224,8 @@ def test_sparam_figure_default_is_mode_00():
     spars = {"freqs": np.array([28e9, 29e9]),
              "s11": np.full((2, 1, 1), 0.5 + 0j), "s21": np.full((2, 1, 1), 0.5 + 0j)}
     fig = figures.sparam_figure(spars)
-    assert {t.name for t in fig.data} == {"S11[0,0]", "S21[0,0]"}
+    lines = {t.name for t in fig.data if t.mode != "markers"}
+    assert lines == {"S11[0,0]", "S21[0,0]"}
 
 
 def test_sparam_figure_plots_cartesian_product_of_selected_modes():
@@ -242,7 +243,8 @@ def test_sparam_figure_plots_cartesian_product_of_selected_modes():
 
     fig = figures.sparam_figure(spars, out_modes=[0, 1], in_modes=[0])
     # {0,1} x {0} cartesian product, each pair -> an S11 and an S21 curve
-    assert {t.name for t in fig.data} == {"S11[0,0]", "S21[0,0]", "S11[1,0]", "S21[1,0]"}
+    lines = {t.name for t in fig.data if t.mode != "markers"}
+    assert lines == {"S11[0,0]", "S21[0,0]", "S11[1,0]", "S21[1,0]"}
 
     # the S21[1,0] curve carries |s21[:,1,0]| in dB
     s21_10 = next(t for t in fig.data if t.name == "S21[1,0]")
@@ -654,22 +656,22 @@ def test_compute_payload_uniform_has_no_energy_model():
     assert payload["energy_model"] is None
 
 
-def test_compute_payload_adaptive_seed_knob():
+def test_compute_payload_points_seed_the_afs_loop():
+    import numpy as np
+
     from pwmma.gui.callbacks import compute_payload
 
-    # default (sweep_seed absent/0) = economy: the bare AFS loop
-    p0, err0 = compute_payload(_adaptive_form("spars"), lambda d, t: None)
-    assert err0 is None
+    # the uniform grid (points) IS the AFS seed: every grid frequency is
+    # solved, and the loop only adds refinement samples on top of it
+    form = dict(_adaptive_form("spars"), f_n=17)
+    payload, err = compute_payload(form, lambda d, t: None)
+    assert err is None
+    mp = payload["spars_model"]
+    assert mp["n_solves"] >= 17
+    grid = np.linspace(28.0, 34.0, 17) * 1e9
+    assert np.isin(grid, mp["s11"]["F"]).all()
 
-    # opt-in precision: at least the requested uniform floor gets solved
-    form = dict(_adaptive_form("spars"), sweep_seed=33)
-    p1, err1 = compute_payload(form, lambda d, t: None)
-    assert err1 is None
-    assert p1["spars_model"]["n_solves"] >= 33
-    assert p0["spars_model"]["n_solves"] < p1["spars_model"]["n_solves"]
-
-    # junk value degrades to economy instead of crashing
-    form_bad = dict(_adaptive_form("spars"), sweep_seed="oops")
-    p2, err2 = compute_payload(form_bad, lambda d, t: None)
-    assert err2 is None
-    assert p2["spars_model"]["n_solves"] == p0["spars_model"]["n_solves"]
+    # points < 3 (ends + center) is rejected in BOTH modes
+    bad, err_bad = compute_payload(dict(_adaptive_form("spars"), f_n=2),
+                                   lambda d, t: None)
+    assert bad is None and "point count" in err_bad

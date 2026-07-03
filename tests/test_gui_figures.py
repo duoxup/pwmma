@@ -45,6 +45,10 @@ def test_sparam_figure_has_traces_in_db():
     names = {t.name for t in fig.data}
     assert "S11[0,0]" in names and "S21[0,0]" in names
     assert "dB" in (fig.layout.yaxis.title.text or "")
+    # uniform sweeps draw the AAA-fitted dense curve + sample markers too
+    s11 = next(t for t in fig.data if t.name == "S11[0,0]")
+    assert len(s11.x) > len(_fake_spars()["freqs"])
+    assert any(t.mode == "markers" for t in fig.data)
 
 
 def test_sparam_figure_zero_sparam_has_no_minus_inf():
@@ -59,8 +63,10 @@ def test_sparam_figure_zero_sparam_has_no_minus_inf():
     for t in fig.data:
         y = np.asarray(t.y, dtype=float)
         assert not np.isinf(y).any()     # no -inf anywhere
-    s21_00 = next(t for t in fig.data if t.name == "S21[0,0]")
-    assert np.all(np.isfinite(np.asarray(s21_00.y, dtype=float)))  # nonzero trace intact
+    # the nonzero curve's SAMPLES stay intact (the dense fit may legitimately
+    # cross |S| = 0 between samples, which renders as NaN gaps, not -inf)
+    s21_00 = next(t for t in fig.data if t.name == "S21[0,0] samples")
+    assert np.all(np.isfinite(np.asarray(s21_00.y, dtype=float)))
 
 
 def _small_section():

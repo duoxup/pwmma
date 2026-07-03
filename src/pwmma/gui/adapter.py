@@ -7,7 +7,7 @@ import numpy as np
 from waveguides import WG, CirWG, RecWG
 
 from .. import analyze_energy_coupling
-from ..analysis import adaptive_seed_frequencies, smooth_section_energy
+from ..analysis import smooth_section_energy
 from ..config import Config
 from ..coupling_matrix import get_coupling_matrix
 from ..inputs import Chain
@@ -73,8 +73,10 @@ def parse_freqs(start_ghz, stop_ghz, n_points) -> np.ndarray:
     start = _num(start_ghz, "start")
     stop = _num(stop_ghz, "stop")
     n = int(_num(n_points, "N points"))
-    if n < 1:
-        raise GuiInputError("frequency point count must be >= 1")
+    if n < 3:
+        # both ends + center: the minimum sensible grid, and the minimum
+        # AFS seed when the adaptive option refines on top of it
+        raise GuiInputError("frequency point count must be >= 3")
     if not start < stop:
         raise GuiInputError(f"'start' must be < 'stop' (got {start} >= {stop})")
     return np.linspace(start, stop, n) * 1e9
@@ -154,34 +156,24 @@ class _SolveRecorder:
         return S
 
 
-def run_adaptive_spars(solver, f0, f1,
-                       progress_callback: Callable[[int, float], None] | None = None,
-                       cms=None, n_uniform: int = 0) -> dict:
-    """Adaptive fundamental-mode S-parameter samples (the production line).
+def run_adaptive_spars(solver, freqs,
+                       progress_callback: Callable[[int, float], None] | None = None) -> dict:
+    """AFS-refined fundamental-mode S-parameter samples.
+
+    The GUI's uniform grid (start–stop x points, min 3) is solved as the AFS
+    seed; the loop then adds samples only where the rational model is still
+    uncertain. ``points`` is thus the single economy/precision knob for both
+    sampling modes — AFS refines on top of whatever floor the user chose, and
+    either way the display ends in an AAA refit.
 
     Plain-numpy payload (diskcache-safe); the UI refits with fit_spar_model on
-    render (milliseconds). ``progress_callback(k, f)`` fires once per solve.
-
-    The default is the bare AFS loop — the economy behavior the adaptive line
-    is designed around. It can converge on a quiet S11 background without
-    feeling narrow sub-tolerance teeth; that is an accepted trade-off, like
-    modal truncation or quadrature order (no solver setting is perfectly
-    faithful). Runs that must identify every fine tooth opt in by setting
-    ``n_uniform`` > 0 (the GUI "seeds" field), which pre-samples a uniform
-    exploration floor of that many points plus cutoff hotspot probes via
-    ``adaptive_seed_frequencies`` (reachability-filtered when ``cms`` is
-    given); ``max_solves`` then gets headroom above the seed count.
+    render. ``progress_callback(k, f)`` fires once per solve.
     """
     rec = _SolveRecorder(solver, on_solve=progress_callback)
-    chain = getattr(solver, "chain", None)
-    seed = None
-    max_solves = 200
-    if n_uniform and chain is not None:
-        seed = adaptive_seed_frequencies(chain, float(f0), float(f1), cms=cms,
-                                         n_uniform=int(n_uniform))
-        max_solves = len(seed) + 200
-    model = adaptive_spar_model(rec, float(f0), float(f1),     # S11[0,0] drives
-                                seed=seed, max_solves=max_solves)
+    freqs = np.asarray(freqs, dtype=float)
+    f0, f1 = float(freqs[0]), float(freqs[-1])
+    model = adaptive_spar_model(rec, f0, f1,                   # S11[0,0] drives
+                                seed=freqs, max_solves=len(freqs) + 200)
     F = np.asarray(model.F, dtype=float)
     return {
         "f0": float(f0), "f1": float(f1),
