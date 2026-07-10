@@ -219,15 +219,19 @@ S-parameters.  For each frequency point and each mode, it computes:
 
 In the heatmap visualisation:
 
-- **Red (positive)** — The mode carries net forward real power at that
-  frequency.  Strong red in high-order modes indicates mode conversion.
-- **Blue (negative)** — The mode stores reactive energy (evanescent,
-  below cutoff).  Blue regions near the cutoff line show modes that are
-  nearly propagating.
+- **Red (positive)** — The mode carries net power in the forward direction
+  at that frequency.  Strong red in high-order modes indicates mode
+  conversion.
+- **Blue (negative)** — The mode carries net power in the backward
+  direction.
 - **White** — Zero net contribution.  The mode is either absent or fully
   decoupled.
 - **Cutoff line** — Marks the boundary between propagating and evanescent
   regimes.  Its frequency dependence traces the dispersion of each mode.
+
+Colour encodes only the direction of net power flow; whether a mode is
+propagating or evanescent is read from the cutoff line, not from the
+colour.
 
 ## 10. Application to Pillbox Windows
 

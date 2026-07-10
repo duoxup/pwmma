@@ -281,7 +281,8 @@ def energy_line_figure(section, *, mode_threshold: float = 0.04, dB: bool = True
 
 
 def energy_heatmap_figure(section, *, mode_mask=None, max_modes: int | None = None) -> go.Figure:
-    """Per-mode power vs frequency; positive=propagating, negative=evanescent.
+    """Per-mode net power vs frequency; sign is the transport direction
+    (red = forward, blue = backward), not the propagating/evanescent split.
 
     A dashed gray line marks the cutoff boundary (modes above it are evanescent;
     valid because mode ids are sorted by cutoff frequency). ``mode_mask`` is a
@@ -305,7 +306,7 @@ def energy_heatmap_figure(section, *, mode_mask=None, max_modes: int | None = No
     labels = section.get_mode_labels(mode_ids=shown)
     fig = go.Figure(go.Heatmap(
         x=freqs_ghz, y=np.arange(len(shown)), z=masked.T,
-        colorscale="RdBu", zmid=0, zmin=-vlim, zmax=vlim,
+        colorscale="RdBu_r", zmid=0, zmin=-vlim, zmax=vlim,
         colorbar=dict(title="Power"),
         customdata=np.repeat(np.asarray(labels)[:, None], len(freqs_ghz), axis=1),
         hovertemplate="%{x:.3f} GHz · %{customdata}<br>power %{z:.4g}<extra></extra>",
