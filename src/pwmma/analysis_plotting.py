@@ -218,10 +218,11 @@ def plot_section_energy_heatmap(
     Heatmap of per-mode energy coupling vs frequency for one analyzed section.
 
     A single colour-mapped grid with frequency on the x-axis and mode index
-    on the y-axis (mode 0 at bottom, higher indices above).  Propagating
-    power (positive, red) and evanescent power (negative, blue) share a
-    unified seismic scale centred at white (zero).  A gray dashed line marks
-    the cutoff boundary between the two regions.
+    on the y-axis (mode 0 at bottom, higher indices above).  Signed net modal
+    power on a seismic scale centred at white (zero): red = net forward
+    power, blue = net backward power.  Colour encodes only the direction of
+    net power flow; whether a mode is propagating or evanescent is read from
+    the gray dashed cutoff boundary line, not from the colour.
 
     Parameters
     ----------
@@ -275,7 +276,7 @@ def plot_section_energy_heatmap(
     evan_mask = section.evanescent_mask[:, shown]
     shown_ids = all_ids[shown]
 
-    # --- combined data: positive = prop, negative = evan ---
+    # --- signed net modal power; sign = transport direction ---
     data = np.where(prop_mask, modal_power, np.nan)
     data = np.where(evan_mask, modal_power, data)
 
