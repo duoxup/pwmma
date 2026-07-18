@@ -55,9 +55,9 @@ from waveguides import RecWG, CirWG
 import pwmma
 
 # Define waveguides
-rwg = RecWG(a=7.112e-3, b=3.556e-3, N=200)
-cwg = CirWG(r=4.2e-3,              N=800)
-dsk = CirWG(r=5.4e-3, er=9.2,      N=800)
+rwg = RecWG(a=7.112e-3, b=3.556e-3, l=2e-3,    N=100)
+cwg = CirWG(r=4.2e-3,               l=1.5e-3,  N=400)
+dsk = CirWG(r=5.4e-3, er=9.2,       l=0.26e-3, N=800)
 
 # Build a symmetric chain: rwg -- cwg -- dsk -- cwg -- rwg
 chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
@@ -66,7 +66,7 @@ chain = pwmma.Chain([rwg, cwg, dsk], sym=True)
 config = pwmma.Config(nproc=8, use_gpu=True, use_double_precision=False)
 
 # Frequency sweep
-freqs = np.linspace(600e9, 740e9, 281)
+freqs = np.linspace(26e9, 40e9, 141)
 
 # Compute S-parameters
 s11, s12, s21, s22 = pwmma.calc_spars_of_wgchain(chain, freqs, config)
